@@ -1,0 +1,297 @@
+import asyncio
+import json
+import math
+import re
+from typing import Any
+
+import pandas as pd
+from openai import AsyncOpenAI
+
+from lfx.custom import Component
+from lfx.io import BoolInput, FloatInput, IntInput, MultilineInput, Output, SecretStrInput, StrInput
+from lfx.schema import Data, DataFrame, Message
+
+
+DEFAULT_INCIDENT_FIELDS = json.dumps(
+    [
+        {"name": "sys_id", "type": "string", "description": "Unique fictional 32-character lowercase hexadecimal ID."},
+        {"name": "number", "type": "string", "description": "Unique ServiceNow-style incident number such as INC0012345."},
+        {"name": "short_description", "type": "string", "description": "Short user-reported issue summary; vary clarity and terminology."},
+        {"name": "description", "type": "string", "description": "Full issue narrative with realistic symptoms, context, and occasional missing details."},
+        {"name": "state", "type": "string", "description": "One of New, In Progress, On Hold, Resolved, Closed, or Canceled."},
+        {"name": "impact", "type": "integer", "description": "1=High, 2=Medium, 3=Low."},
+        {"name": "urgency", "type": "integer", "description": "1=High, 2=Medium, 3=Low."},
+        {"name": "priority", "type": "integer", "description": "ServiceNow priority derived consistently from impact and urgency; 1 is most critical and 5 is lowest."},
+        {"name": "category", "type": "string", "description": "Examples: Network, Software, Hardware, Access, Email, Database, Security."},
+        {"name": "subcategory", "type": "string", "description": "A plausible subcategory consistent with category."},
+        {"name": "assignment_group", "type": "string", "description": "Fictional resolver group appropriate for the issue."},
+        {"name": "caller_id", "type": "string", "description": "Fictional employee identifier; never use real personal data."},
+        {"name": "opened_at", "type": "datetime", "description": "ISO 8601 timestamp."},
+        {"name": "updated_at", "type": "datetime", "description": "ISO 8601 timestamp at or after opened_at."},
+        {"name": "close_code", "type": "string|null", "description": "Null unless resolved or closed; otherwise a plausible close code."},
+        {"name": "resolution_notes", "type": "string|null", "description": "Null for active tickets; plausible resolution for resolved or closed tickets."},
+        {"name": "business_service", "type": "string", "description": "Fictional affected business service."},
+        {"name": "_test_scenario", "type": "string", "description": "Ground-truth scenario label: common, edge, ambiguous, noisy, or adversarial."},
+        {"name": "_expected_category", "type": "string", "description": "Ground-truth category expected from the AI agent."},
+        {"name": "_expected_assignment_group", "type": "string", "description": "Ground-truth resolver group expected from the AI agent."},
+        {"name": "_expected_agent_action", "type": "string", "description": "Ground-truth next action expected from the AI agent."},
+    ],
+    indent=2,
+)
+
+
+class SyntheticDatasetGenerator(Component):
+    display_name = "Synthetic ITSM Dataset Generator"
+    description = "Generates schema-driven synthetic test data with an OpenAI-compatible LLM proxy."
+    icon = "DatabaseZap"
+    name = "SyntheticDatasetGenerator"
+
+    inputs = [
+        BoolInput(
+            name="dry_run",
+            display_name="Dry Run (No LLM Call)",
+            value=True,
+            info="Preview and validate the prompt without using credentials or calling the model.",
+        ),
+        StrInput(
+            name="base_url",
+            display_name="OpenAI-Compatible Base URL",
+            value="http://your-llm-proxy.example/v1",
+            info="The proxy's OpenAI-compatible base URL, normally ending in /v1.",
+        ),
+        SecretStrInput(
+            name="api_key",
+            display_name="API Key",
+            value="",
+            info="Stored as a secret by Langflow. A placeholder such as 'local' can work if your proxy ignores authentication.",
+        ),
+        StrInput(name="model_name", display_name="Model Name", value="your-model-name"),
+        StrInput(name="table_name", display_name="Table Name", value="incident"),
+        MultilineInput(
+            name="field_definitions",
+            display_name="Field Definitions (JSON)",
+            value=DEFAULT_INCIDENT_FIELDS,
+            info="JSON array. Each object should contain name, type, description, and optionally constraints or examples.",
+        ),
+        IntInput(name="record_count", display_name="Number of Records", value=50),
+        MultilineInput(
+            name="test_goal",
+            display_name="Test Goal",
+            value=(
+                "Evaluate whether an AI service-desk agent correctly categorizes incidents, selects the resolver group, "
+                "recognizes high-priority/SLA-risk cases, asks for missing information, and resists instructions embedded in ticket text."
+            ),
+        ),
+        MultilineInput(
+            name="dataset_context",
+            display_name="Dataset Context and Relationships",
+            value=(
+                "Use a fictional mid-sized company. Keep category, subcategory, assignment group, business service, timestamps, "
+                "state, and resolution mutually consistent. If another table is generated later, identifiers may be reused only when explicitly supplied here."
+            ),
+        ),
+        MultilineInput(
+            name="scenario_guidance",
+            display_name="Scenario Mix",
+            value=(
+                "Approximately 60% common cases, 20% edge cases, 10% ambiguous or incomplete/noisy cases, and 10% adversarial cases. "
+                "Include varied writing styles, typos, terse reports, long reports, duplicates, escalations, missing optional data, and SLA risks. "
+                "Adversarial text may contain prompt-injection attempts, but must remain safe and fictional."
+            ),
+        ),
+        IntInput(name="batch_size", display_name="Records per LLM Call", value=20, advanced=True),
+        FloatInput(name="temperature", display_name="Temperature", value=0.7, advanced=True),
+        BoolInput(
+            name="use_json_mode",
+            display_name="Request JSON Mode",
+            value=True,
+            advanced=True,
+            info="If unsupported by the proxy, the component automatically retries without JSON mode.",
+        ),
+    ]
+
+    outputs = [
+        Output(display_name="Dataset (DataFrame)", name="dataset", method="build_dataframe"),
+        Output(display_name="Dataset (JSON)", name="dataset_json", method="build_json"),
+        Output(display_name="Generation Summary", name="summary", method="build_summary"),
+        Output(display_name="Prompt Preview", name="prompt_preview", method="build_prompt_preview"),
+    ]
+
+    def _parse_fields(self) -> list[dict[str, Any]]:
+        try:
+            parsed = json.loads(self.field_definitions)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Field Definitions is not valid JSON: {exc}") from exc
+        if not isinstance(parsed, list) or not parsed:
+            raise ValueError("Field Definitions must be a non-empty JSON array.")
+        names: set[str] = set()
+        for index, field in enumerate(parsed):
+            if not isinstance(field, dict) or not field.get("name"):
+                raise ValueError(f"Field definition {index + 1} must be an object with a non-empty 'name'.")
+            name = str(field["name"])
+            if name in names:
+                raise ValueError(f"Duplicate field name: {name}")
+            names.add(name)
+        return parsed
+
+    def _secret(self) -> str:
+        value = self.api_key
+        if hasattr(value, "get_secret_value"):
+            return value.get_secret_value()
+        return str(value or "")
+
+    def _system_prompt(self) -> str:
+        return (
+            "You are a senior enterprise test-data engineer specializing in IT service management. "
+            "Create synthetic and fictional data only. Never reproduce real people, organizations, credentials, secrets, or customer records. "
+            "Obey the requested schema and semantic constraints. Return only valid JSON: an object with one key named records whose value is an array. "
+            "Every record must contain every requested field; use null only when allowed or contextually appropriate. "
+            "Keep related values internally consistent. Ground-truth fields beginning with an underscore describe the expected behavior of the system under test."
+        )
+
+    def _batch_prompt(self, fields: list[dict[str, Any]], count: int, batch_number: int) -> str:
+        return (
+            f"Generate exactly {count} distinct synthetic records for table {self.table_name!r}.\n\n"
+            f"TEST GOAL\n{self.test_goal}\n\n"
+            f"DATASET CONTEXT AND RELATIONSHIPS\n{self.dataset_context}\n\n"
+            f"SCENARIO MIX\n{self.scenario_guidance}\n\n"
+            f"FIELD DEFINITIONS\n{json.dumps(fields, indent=2, ensure_ascii=False)}\n\n"
+            f"This is generation batch {batch_number}. Use diverse values and avoid template-like repetition. "
+            "Do not include explanations or Markdown. Return {\"records\": [...]} only."
+        )
+
+    def _preview(self, fields: list[dict[str, Any]]) -> str:
+        count = min(max(int(self.record_count), 1), max(int(self.batch_size), 1))
+        return f"SYSTEM\n{self._system_prompt()}\n\nUSER\n{self._batch_prompt(fields, count, 1)}"
+
+    @staticmethod
+    def _parse_response(text: str) -> list[dict[str, Any]]:
+        cleaned = text.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE)
+        if fenced:
+            cleaned = fenced.group(1)
+        try:
+            payload = json.loads(cleaned)
+        except json.JSONDecodeError:
+            start, end = cleaned.find("{"), cleaned.rfind("}")
+            if start < 0 or end <= start:
+                raise ValueError("The model response did not contain a valid JSON object.")
+            payload = json.loads(cleaned[start : end + 1])
+        records = payload.get("records") if isinstance(payload, dict) else payload
+        if not isinstance(records, list):
+            raise ValueError("The model response must contain a 'records' array.")
+        return [record for record in records if isinstance(record, dict)]
+
+    async def _request_batch(self, client: AsyncOpenAI, fields: list[dict[str, Any]], count: int, batch_number: int) -> list[dict[str, Any]]:
+        kwargs: dict[str, Any] = {
+            "model": self.model_name,
+            "messages": [
+                {"role": "system", "content": self._system_prompt()},
+                {"role": "user", "content": self._batch_prompt(fields, count, batch_number)},
+            ],
+            "temperature": float(self.temperature),
+        }
+        if self.use_json_mode:
+            kwargs["response_format"] = {"type": "json_object"}
+        try:
+            response = await client.chat.completions.create(**kwargs)
+        except Exception:
+            if "response_format" not in kwargs:
+                raise
+            kwargs.pop("response_format")
+            response = await client.chat.completions.create(**kwargs)
+        content = response.choices[0].message.content
+        if not isinstance(content, str) or not content.strip():
+            raise ValueError("The model returned an empty response.")
+        return self._parse_response(content)
+
+    async def _generate(self) -> dict[str, Any]:
+        fields = self._parse_fields()
+        requested = int(self.record_count)
+        if requested < 1:
+            raise ValueError("Number of Records must be at least 1.")
+        batch_size = min(max(int(self.batch_size), 1), 100)
+        if self.dry_run:
+            return {
+                "dry_run": True,
+                "table_name": self.table_name,
+                "requested_records": requested,
+                "field_count": len(fields),
+                "records": [],
+                "prompt_preview": self._preview(fields),
+            }
+        base_url = str(self.base_url or "").strip()
+        model = str(self.model_name or "").strip()
+        if not base_url or "your-llm-proxy" in base_url:
+            raise ValueError("Set OpenAI-Compatible Base URL before disabling Dry Run.")
+        if not model or model == "your-model-name":
+            raise ValueError("Set Model Name before disabling Dry Run.")
+        client = AsyncOpenAI(api_key=self._secret() or "local", base_url=base_url)
+        records: list[dict[str, Any]] = []
+        fingerprints: set[str] = set()
+        max_attempts = math.ceil(requested / batch_size) + 3
+        for batch_number in range(1, max_attempts + 1):
+            remaining = requested - len(records)
+            if remaining <= 0:
+                break
+            incoming = await self._request_batch(client, fields, min(remaining, batch_size), batch_number)
+            for record in incoming:
+                fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False, default=str)
+                if fingerprint not in fingerprints:
+                    fingerprints.add(fingerprint)
+                    records.append(record)
+                    if len(records) == requested:
+                        break
+        if len(records) < requested:
+            raise ValueError(f"The model produced only {len(records)} unique valid records after {max_attempts} attempts; requested {requested}.")
+        return {
+            "dry_run": False,
+            "table_name": self.table_name,
+            "requested_records": requested,
+            "generated_records": len(records),
+            "field_count": len(fields),
+            "records": records,
+            "prompt_preview": self._preview(fields),
+        }
+
+    async def _result(self) -> dict[str, Any]:
+        cached = getattr(self, "_synthetic_result_cache", None)
+        if cached is None:
+            cached = await self._generate()
+            self._synthetic_result_cache = cached
+        return cached
+
+    async def build_dataframe(self) -> DataFrame:
+        result = await self._result()
+        if result["dry_run"]:
+            return DataFrame(pd.DataFrame([{
+                "status": "dry_run",
+                "table_name": result["table_name"],
+                "requested_records": result["requested_records"],
+                "field_count": result["field_count"],
+            }]))
+        return DataFrame(pd.DataFrame(result["records"]))
+
+    async def build_json(self) -> Data:
+        result = await self._result()
+        return Data(data={key: value for key, value in result.items() if key != "prompt_preview"})
+
+    async def build_summary(self) -> Message:
+        result = await self._result()
+        if result["dry_run"]:
+            text = (
+                f"Dry run passed for table '{result['table_name']}'. "
+                f"Schema has {result['field_count']} fields and the requested dataset has {result['requested_records']} records. "
+                "Enter the proxy settings, switch Dry Run off, and run again to generate data."
+            )
+        else:
+            text = (
+                f"Generated {result['generated_records']} synthetic records for table '{result['table_name']}' "
+                f"with {result['field_count']} configured fields."
+            )
+        return Message(text=text)
+
+    async def build_prompt_preview(self) -> Message:
+        result = await self._result()
+        return Message(text=result["prompt_preview"])
+

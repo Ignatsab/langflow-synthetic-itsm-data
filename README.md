@@ -1,0 +1,50 @@
+# Synthetic ITSM Dataset Generator for Langflow
+
+`servicenow_synthetic_dataset_generator.json` is an importable Langflow flow for producing fictional, schema-driven test datasets with an OpenAI-compatible LLM.
+
+## Import and configure
+
+1. In Langflow, open a project and choose **Upload flow** (or **Import**), then select `servicenow_synthetic_dataset_generator.json`.
+2. Open the **Synthetic ITSM Dataset Generator** component.
+3. Leave **Dry Run** enabled and run once. Inspect **Generation Summary** and **Prompt Preview**.
+4. Enter the LLM proxy **Base URL**, **API Key**, and **Model Name**.
+5. Disable **Dry Run**, set the table, fields, record count, test goal, context, and scenario mix, then run the component.
+6. Use **Dataset (DataFrame)** for tabular downstream processing or **Dataset (JSON)** for agent/evaluation flows.
+
+No extra Langflow package is required. The component uses `openai` and `pandas`, which are already included in the tested Langflow 1.11.5 installation.
+
+## Field Definitions format
+
+Field Definitions must be a JSON array:
+
+```json
+[
+  {
+    "name": "number",
+    "type": "string",
+    "description": "Unique ServiceNow-style incident number such as INC0012345."
+  },
+  {
+    "name": "priority",
+    "type": "integer",
+    "description": "Integer 1 through 5, consistent with impact and urgency."
+  }
+]
+```
+
+The imported flow contains a complete Incident example. Edit that JSON for `change_request`, `sc_request`, `sc_req_item`, or any non-ServiceNow table. Add fields beginning with `_expected_` to store ground truth used to score the final AI agent.
+
+## Practical notes
+
+- The generator makes multiple calls in batches, which is safer for local models than asking for hundreds of rows in one response.
+- If the proxy does not implement OpenAI JSON mode, the component retries automatically without it.
+- A blank API key is sent as `local`; this supports proxies that do not require authentication.
+- The component asks for exactly the requested number of distinct valid JSON records and retries when a batch is short or duplicated.
+- Synthetic records can contain safe prompt-injection text to test agent robustness, but the system prompt prohibits real people, customer data, credentials, and secrets.
+- For linked tables, generate the parent table first and paste its fictional identifiers or relationship rules into **Dataset Context and Relationships** for the next table.
+
+## Included files
+
+- `servicenow_synthetic_dataset_generator.json`: portable Langflow flow
+- `synthetic_dataset_generator_component.py`: editable component source
+- `build_langflow_artifact.py`: rebuilds the portable JSON inside a compatible Langflow Python environment
