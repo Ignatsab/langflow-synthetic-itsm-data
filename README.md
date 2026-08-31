@@ -34,6 +34,35 @@ Field Definitions must be a JSON array:
 
 The imported flow contains a complete Incident example. Edit that JSON for `change_request`, `sc_request`, `sc_req_item`, or any non-ServiceNow table. Add fields beginning with `_expected_` to store ground truth used to score the final AI agent.
 
+## Use examples from real data
+
+Paste a small, representative, pre-approved sample into **Sanitized Reference Examples (JSON)**. It can be a flat array or grouped by the behavior you want to preserve:
+
+```json
+{
+  "Network Support": [
+    {
+      "short_description": "VPN disconnects after several minutes",
+      "category": "Network",
+      "subcategory": "VPN",
+      "assignment_group": "Network Support"
+    }
+  ],
+  "Access Management": [
+    {
+      "short_description": "Cannot access the finance application",
+      "category": "Access",
+      "subcategory": "Application access",
+      "assignment_group": "Access Management"
+    }
+  ]
+}
+```
+
+Set **Reference Group Field** to the distinguishing field, normally `assignment_group`, `category`, or `request_type`. The generator uses the examples to imitate vocabulary, distributions, and group-specific correlations without copying complete records. It limits the number of examples and redacts configured fields plus email addresses before building the prompt.
+
+Only provide reference data that is approved for the target LLM environment. Automatic redaction is a safety layer, not a substitute for organizational data-handling rules; remove names and sensitive free text before pasting examples.
+
 ## Practical notes
 
 - The generator makes multiple calls in batches, which is safer for local models than asking for hundreds of rows in one response.
@@ -41,6 +70,7 @@ The imported flow contains a complete Incident example. Edit that JSON for `chan
 - A blank API key is sent as `local`; this supports proxies that do not require authentication.
 - The component asks for exactly the requested number of distinct valid JSON records and retries when a batch is short or duplicated.
 - Synthetic records can contain safe prompt-injection text to test agent robustness, but the system prompt prohibits real people, customer data, credentials, and secrets.
+- Reference examples are treated as few-shot pattern guidance and are never used as output records.
 - For linked tables, generate the parent table first and paste its fictional identifiers or relationship rules into **Dataset Context and Relationships** for the next table.
 
 ## Included files

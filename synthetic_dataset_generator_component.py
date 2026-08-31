@@ -99,6 +99,34 @@ class SyntheticDatasetGenerator(Component):
                 "Adversarial text may contain prompt-injection attempts, but must remain safe and fictional."
             ),
         ),
+        MultilineInput(
+            name="reference_examples",
+            display_name="Sanitized Reference Examples (JSON)",
+            value="[]",
+            info=(
+                "Optional examples used to learn structure, vocabulary, and group patterns. Paste a JSON array of records "
+                "or an object whose keys are group names. Use only data approved for your LLM environment."
+            ),
+        ),
+        StrInput(
+            name="example_group_field",
+            display_name="Reference Group Field",
+            value="assignment_group",
+            info="Field used to learn group-specific patterns, such as assignment_group, category, or request_type.",
+        ),
+        StrInput(
+            name="redact_reference_fields",
+            display_name="Fields to Redact from Examples",
+            value="sys_id,caller_id,opened_by,requested_for,assigned_to,email,phone",
+            info="Comma-separated field names replaced before examples are sent to the LLM.",
+        ),
+        IntInput(
+            name="max_reference_examples",
+            display_name="Maximum Reference Examples",
+            value=20,
+            advanced=True,
+            info="Caps prompt size. Select a representative mix across the groups you want to test.",
+        ),
         IntInput(name="batch_size", display_name="Records per LLM Call", value=20, advanced=True),
         FloatInput(name="temperature", display_name="Temperature", value=0.7, advanced=True),
         BoolInput(
@@ -134,6 +162,57 @@ class SyntheticDatasetGenerator(Component):
             names.add(name)
         return parsed
 
+    def _parse_reference_examples(self) -> list[dict[str, Any]]:
+        text = str(self.reference_examples or "").strip()
+        if not text:
+            return []
+        try:
+            parsed = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise ValueError(f"Sanitized Reference Examples is not valid JSON: {exc}") from exc
+
+        records: list[dict[str, Any]] = []
+        group_field = str(self.example_group_field or "assignment_group").strip()
+        if isinstance(parsed, list):
+            records = [item for item in parsed if isinstance(item, dict)]
+        elif isinstance(parsed, dict):
+            for group_name, group_records in parsed.items():
+                if not isinstance(group_records, list):
+                    raise ValueError("Each group in Reference Examples must contain a JSON array of records.")
+                for item in group_records:
+                    if isinstance(item, dict):
+                        record = dict(item)
+                        if group_field:
+                            record.setdefault(group_field, group_name)
+                        records.append(record)
+        else:
+            raise ValueError("Reference Examples must be a JSON array or an object containing group arrays.")
+
+        limit = min(max(int(self.max_reference_examples), 0), 100)
+        redacted_fields = {
+            name.strip().lower()
+            for name in str(self.redact_reference_fields or "").split(",")
+            if name.strip()
+        }
+
+        def sanitize(value: Any, field_name: str = "") -> Any:
+            if field_name.lower() in redacted_fields:
+                return f"[REDACTED_{field_name.upper()}]"
+            if isinstance(value, dict):
+                return {key: sanitize(item, str(key)) for key, item in value.items()}
+            if isinstance(value, list):
+                return [sanitize(item, field_name) for item in value]
+            if isinstance(value, str):
+                return re.sub(
+                    r"\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b",
+                    "[REDACTED_EMAIL]",
+                    value,
+                    flags=re.IGNORECASE,
+                )
+            return value
+
+        return [sanitize(record) for record in records[:limit]]
+
     def _secret(self) -> str:
         value = self.api_key
         if hasattr(value, "get_secret_value"):
@@ -144,25 +223,42 @@ class SyntheticDatasetGenerator(Component):
         return (
             "You are a senior enterprise test-data engineer specializing in IT service management. "
             "Create synthetic and fictional data only. Never reproduce real people, organizations, credentials, secrets, or customer records. "
+            "Reference examples are pattern guidance only: learn their vocabulary, structure, distributions, and group correlations, "
+            "but never copy a row or identifying value. "
             "Obey the requested schema and semantic constraints. Return only valid JSON: an object with one key named records whose value is an array. "
             "Every record must contain every requested field; use null only when allowed or contextually appropriate. "
             "Keep related values internally consistent. Ground-truth fields beginning with an underscore describe the expected behavior of the system under test."
         )
 
-    def _batch_prompt(self, fields: list[dict[str, Any]], count: int, batch_number: int) -> str:
+    def _batch_prompt(
+        self,
+        fields: list[dict[str, Any]],
+        examples: list[dict[str, Any]],
+        count: int,
+        batch_number: int,
+    ) -> str:
+        examples_text = (
+            json.dumps(examples, indent=2, ensure_ascii=False)
+            if examples
+            else "No reference examples supplied."
+        )
         return (
             f"Generate exactly {count} distinct synthetic records for table {self.table_name!r}.\n\n"
             f"TEST GOAL\n{self.test_goal}\n\n"
             f"DATASET CONTEXT AND RELATIONSHIPS\n{self.dataset_context}\n\n"
             f"SCENARIO MIX\n{self.scenario_guidance}\n\n"
             f"FIELD DEFINITIONS\n{json.dumps(fields, indent=2, ensure_ascii=False)}\n\n"
+            f"SANITIZED REFERENCE EXAMPLES\n{examples_text}\n\n"
+            f"REFERENCE GROUP FIELD\n{self.example_group_field}\n\n"
+            "Match realistic patterns and group-specific distinctions shown by the references while creating wholly new cases. "
+            "Do not repeat reference identifiers, wording, timestamps, or complete records. Cover the represented groups meaningfully. "
             f"This is generation batch {batch_number}. Use diverse values and avoid template-like repetition. "
             "Do not include explanations or Markdown. Return {\"records\": [...]} only."
         )
 
-    def _preview(self, fields: list[dict[str, Any]]) -> str:
+    def _preview(self, fields: list[dict[str, Any]], examples: list[dict[str, Any]]) -> str:
         count = min(max(int(self.record_count), 1), max(int(self.batch_size), 1))
-        return f"SYSTEM\n{self._system_prompt()}\n\nUSER\n{self._batch_prompt(fields, count, 1)}"
+        return f"SYSTEM\n{self._system_prompt()}\n\nUSER\n{self._batch_prompt(fields, examples, count, 1)}"
 
     @staticmethod
     def _parse_response(text: str) -> list[dict[str, Any]]:
@@ -182,12 +278,19 @@ class SyntheticDatasetGenerator(Component):
             raise ValueError("The model response must contain a 'records' array.")
         return [record for record in records if isinstance(record, dict)]
 
-    async def _request_batch(self, client: AsyncOpenAI, fields: list[dict[str, Any]], count: int, batch_number: int) -> list[dict[str, Any]]:
+    async def _request_batch(
+        self,
+        client: AsyncOpenAI,
+        fields: list[dict[str, Any]],
+        examples: list[dict[str, Any]],
+        count: int,
+        batch_number: int,
+    ) -> list[dict[str, Any]]:
         kwargs: dict[str, Any] = {
             "model": self.model_name,
             "messages": [
                 {"role": "system", "content": self._system_prompt()},
-                {"role": "user", "content": self._batch_prompt(fields, count, batch_number)},
+                {"role": "user", "content": self._batch_prompt(fields, examples, count, batch_number)},
             ],
             "temperature": float(self.temperature),
         }
@@ -207,6 +310,7 @@ class SyntheticDatasetGenerator(Component):
 
     async def _generate(self) -> dict[str, Any]:
         fields = self._parse_fields()
+        examples = self._parse_reference_examples()
         requested = int(self.record_count)
         if requested < 1:
             raise ValueError("Number of Records must be at least 1.")
@@ -217,8 +321,9 @@ class SyntheticDatasetGenerator(Component):
                 "table_name": self.table_name,
                 "requested_records": requested,
                 "field_count": len(fields),
+                "reference_example_count": len(examples),
                 "records": [],
-                "prompt_preview": self._preview(fields),
+                "prompt_preview": self._preview(fields, examples),
             }
         base_url = str(self.base_url or "").strip()
         model = str(self.model_name or "").strip()
@@ -234,7 +339,7 @@ class SyntheticDatasetGenerator(Component):
             remaining = requested - len(records)
             if remaining <= 0:
                 break
-            incoming = await self._request_batch(client, fields, min(remaining, batch_size), batch_number)
+            incoming = await self._request_batch(client, fields, examples, min(remaining, batch_size), batch_number)
             for record in incoming:
                 fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False, default=str)
                 if fingerprint not in fingerprints:
@@ -250,8 +355,9 @@ class SyntheticDatasetGenerator(Component):
             "requested_records": requested,
             "generated_records": len(records),
             "field_count": len(fields),
+            "reference_example_count": len(examples),
             "records": records,
-            "prompt_preview": self._preview(fields),
+            "prompt_preview": self._preview(fields, examples),
         }
 
     async def _result(self) -> dict[str, Any]:
@@ -269,6 +375,7 @@ class SyntheticDatasetGenerator(Component):
                 "table_name": result["table_name"],
                 "requested_records": result["requested_records"],
                 "field_count": result["field_count"],
+                "reference_example_count": result["reference_example_count"],
             }]))
         return DataFrame(pd.DataFrame(result["records"]))
 
@@ -282,16 +389,16 @@ class SyntheticDatasetGenerator(Component):
             text = (
                 f"Dry run passed for table '{result['table_name']}'. "
                 f"Schema has {result['field_count']} fields and the requested dataset has {result['requested_records']} records. "
+                f"The prompt includes {result['reference_example_count']} sanitized reference examples. "
                 "Enter the proxy settings, switch Dry Run off, and run again to generate data."
             )
         else:
             text = (
                 f"Generated {result['generated_records']} synthetic records for table '{result['table_name']}' "
-                f"with {result['field_count']} configured fields."
+                f"with {result['field_count']} configured fields using {result['reference_example_count']} sanitized reference examples."
             )
         return Message(text=text)
 
     async def build_prompt_preview(self) -> Message:
         result = await self._result()
         return Message(text=result["prompt_preview"])
-
