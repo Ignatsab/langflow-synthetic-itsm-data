@@ -2,6 +2,8 @@
 
 `servicenow_synthetic_dataset_generator.json` is an importable Langflow flow for producing fictional, schema-driven test datasets with an OpenAI-compatible LLM.
 
+`know_your_bau_flow.json` is a complete evaluation pipeline that generates labeled tickets, builds a label-free holdout, classifies and routes the tickets, and scores the predictions against hidden ground truth.
+
 ## Import and configure
 
 1. In Langflow, open a project and choose **Upload flow** (or **Import**), then select `servicenow_synthetic_dataset_generator.json`.
@@ -12,6 +14,39 @@
 6. Use **Dataset (DataFrame)** for tabular downstream processing or **Dataset (JSON)** for agent/evaluation flows.
 
 No extra Langflow package is required. The component uses `openai` and `pandas`, which are already included in the tested Langflow 1.11.5 installation.
+
+## Know Your BAU evaluation flow
+
+Import `know_your_bau_flow.json`. It contains four connected components:
+
+1. **Synthetic ITSM Dataset Generator** creates fictional tickets and `_expected_*` ground-truth labels.
+2. **BAU Holdout Dataset Builder** takes only the configured sample size and removes category, assignment group, and every `_expected_*` field before the agent sees the tickets.
+3. **Know Your BAU Classification Agent** predicts:
+   - category
+   - ticket type
+   - required skills
+   - technology
+   - support level (`L1`, `L2`, or `L3`)
+   - assignment group
+   - recommended agent action
+4. **Know Your BAU Evaluator** joins predictions to hidden truth by ticket number and reports prediction coverage, all-fields exact match, and per-field accuracy.
+
+Both LLM-powered components start in **Dry Run** mode. Enter the same OpenAI-compatible Base URL, API key, and model name in the generator and classification agent. Test each prompt preview, then disable Dry Run on both components.
+
+The Holdout Dataset Builder defaults to 10 randomly selected tickets with a fixed seed. It removes `category`, `subcategory`, `assignment_group`, and all `_expected_*` columns, preventing ground-truth leakage. Add other answer-bearing fields to **Additional Fields to Hide** when you customize the schema.
+
+The evaluator performs normalized exact matching. Arrays such as required skills are compared without regard to order or capitalization. Free-text fields such as agent action are therefore intentionally strict; use categorical action labels in the ground truth when you need stable automated scores.
+
+## Performance tuning
+
+The optimized generator defaults to 25 records per call and two concurrent calls, so a 50-record dataset can be generated in two parallel batches instead of three sequential batches. It also sends compact schema and example JSON to reduce repeated input tokens.
+
+- If the proxy/model can process simultaneous requests, keep **Concurrent LLM Calls** at `2`; try `3` or `4` only after checking server capacity.
+- If the proxy serializes requests or runs close to its memory limit, set concurrency to `1`.
+- Increase **Records per LLM Call** to reduce prompt repetition, but ensure the model has enough context/output-token capacity.
+- Generate only the fields needed for the test. Long descriptions and many output columns dominate generation time.
+- For quick iterations, generate 10-20 source tickets and set the holdout sample to 5. Scale up only for final evaluation.
+- The classification agent also batches tickets and supports concurrent calls independently.
 
 ## Field Definitions format
 
@@ -76,5 +111,11 @@ Only provide reference data that is approved for the target LLM environment. Aut
 ## Included files
 
 - `servicenow_synthetic_dataset_generator.json`: portable Langflow flow
+- `know_your_bau_flow.json`: complete generation, holdout, classification, and evaluation flow
 - `synthetic_dataset_generator_component.py`: editable component source
+- `holdout_dataset_builder_component.py`: limits the test set and hides labels
+- `know_your_bau_agent_component.py`: OpenAI-compatible BAU classification agent
+- `bau_evaluator_component.py`: deterministic ground-truth comparison and metrics
 - `build_langflow_artifact.py`: rebuilds the portable JSON inside a compatible Langflow Python environment
+- `build_know_your_bau_flow.py`: assembles the four-node flow
+- `tests/validate_know_your_bau.py`: validates masking, dry-run classification, and scoring in the Langflow runtime

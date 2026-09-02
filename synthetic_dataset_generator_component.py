@@ -1,6 +1,5 @@
 import asyncio
 import json
-import math
 import re
 from typing import Any
 
@@ -33,6 +32,10 @@ DEFAULT_INCIDENT_FIELDS = json.dumps(
         {"name": "business_service", "type": "string", "description": "Fictional affected business service."},
         {"name": "_test_scenario", "type": "string", "description": "Ground-truth scenario label: common, edge, ambiguous, noisy, or adversarial."},
         {"name": "_expected_category", "type": "string", "description": "Ground-truth category expected from the AI agent."},
+        {"name": "_expected_ticket_type", "type": "string", "description": "Ground-truth type, such as incident, service request, access request, security event, or problem candidate."},
+        {"name": "_expected_required_skills", "type": "array[string]", "description": "Ground-truth technical skills needed to resolve or triage the ticket."},
+        {"name": "_expected_technology", "type": "string", "description": "Ground-truth primary technology or platform involved."},
+        {"name": "_expected_support_level", "type": "string", "description": "Ground-truth support tier: L1, L2, or L3."},
         {"name": "_expected_assignment_group", "type": "string", "description": "Ground-truth resolver group expected from the AI agent."},
         {"name": "_expected_agent_action", "type": "string", "description": "Ground-truth next action expected from the AI agent."},
     ],
@@ -127,7 +130,21 @@ class SyntheticDatasetGenerator(Component):
             advanced=True,
             info="Caps prompt size. Select a representative mix across the groups you want to test.",
         ),
-        IntInput(name="batch_size", display_name="Records per LLM Call", value=20, advanced=True),
+        IntInput(name="batch_size", display_name="Records per LLM Call", value=25, advanced=True),
+        IntInput(
+            name="max_concurrency",
+            display_name="Concurrent LLM Calls",
+            value=2,
+            advanced=True,
+            info="Use 1 for a single-threaded local server. Use 2-4 only when the proxy can process concurrent requests.",
+        ),
+        BoolInput(
+            name="compact_prompt",
+            display_name="Compact Prompt",
+            value=True,
+            advanced=True,
+            info="Reduces repeated input tokens by sending schema and examples as compact JSON.",
+        ),
         FloatInput(name="temperature", display_name="Temperature", value=0.7, advanced=True),
         BoolInput(
             name="use_json_mode",
@@ -237,23 +254,29 @@ class SyntheticDatasetGenerator(Component):
         count: int,
         batch_number: int,
     ) -> str:
+        json_options = {"ensure_ascii": False}
+        if self.compact_prompt:
+            json_options["separators"] = (",", ":")
+        else:
+            json_options["indent"] = 2
         examples_text = (
-            json.dumps(examples, indent=2, ensure_ascii=False)
+            json.dumps(examples, **json_options)
             if examples
             else "No reference examples supplied."
         )
+        fields_text = json.dumps(fields, **json_options)
         return (
             f"Generate exactly {count} distinct synthetic records for table {self.table_name!r}.\n\n"
             f"TEST GOAL\n{self.test_goal}\n\n"
             f"DATASET CONTEXT AND RELATIONSHIPS\n{self.dataset_context}\n\n"
             f"SCENARIO MIX\n{self.scenario_guidance}\n\n"
-            f"FIELD DEFINITIONS\n{json.dumps(fields, indent=2, ensure_ascii=False)}\n\n"
+            f"FIELD DEFINITIONS\n{fields_text}\n\n"
             f"SANITIZED REFERENCE EXAMPLES\n{examples_text}\n\n"
             f"REFERENCE GROUP FIELD\n{self.example_group_field}\n\n"
             "Match realistic patterns and group-specific distinctions shown by the references while creating wholly new cases. "
             "Do not repeat reference identifiers, wording, timestamps, or complete records. Cover the represented groups meaningfully. "
             f"This is generation batch {batch_number}. Use diverse values and avoid template-like repetition. "
-            "Do not include explanations or Markdown. Return {\"records\": [...]} only."
+            "Do not include explanations or Markdown. Return compact JSON as {\"records\":[...]} only."
         )
 
     def _preview(self, fields: list[dict[str, Any]], examples: list[dict[str, Any]]) -> str:
@@ -334,21 +357,45 @@ class SyntheticDatasetGenerator(Component):
         client = AsyncOpenAI(api_key=self._secret() or "local", base_url=base_url)
         records: list[dict[str, Any]] = []
         fingerprints: set[str] = set()
-        max_attempts = math.ceil(requested / batch_size) + 3
-        for batch_number in range(1, max_attempts + 1):
-            remaining = requested - len(records)
-            if remaining <= 0:
-                break
-            incoming = await self._request_batch(client, fields, examples, min(remaining, batch_size), batch_number)
+        batch_counts = [
+            min(batch_size, requested - offset)
+            for offset in range(0, requested, batch_size)
+        ]
+        concurrency = min(max(int(self.max_concurrency), 1), 8)
+        semaphore = asyncio.Semaphore(concurrency)
+
+        async def run_batch(batch_number: int, count: int) -> list[dict[str, Any]]:
+            async with semaphore:
+                return await self._request_batch(client, fields, examples, count, batch_number)
+
+        initial_batches = await asyncio.gather(
+            *(run_batch(number, count) for number, count in enumerate(batch_counts, start=1))
+        )
+
+        def add_records(incoming: list[dict[str, Any]]) -> None:
             for record in incoming:
                 fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False, default=str)
                 if fingerprint not in fingerprints:
                     fingerprints.add(fingerprint)
                     records.append(record)
-                    if len(records) == requested:
+                    if len(records) >= requested:
                         break
+
+        for incoming in initial_batches:
+            add_records(incoming)
+            if len(records) >= requested:
+                break
+
+        retry_number = len(batch_counts) + 1
+        for _ in range(3):
+            remaining = requested - len(records)
+            if remaining <= 0:
+                break
+            add_records(await run_batch(retry_number, min(remaining, batch_size)))
+            retry_number += 1
         if len(records) < requested:
-            raise ValueError(f"The model produced only {len(records)} unique valid records after {max_attempts} attempts; requested {requested}.")
+            raise ValueError(f"The model produced only {len(records)} unique valid records after retries; requested {requested}.")
+        records = records[:requested]
         return {
             "dry_run": False,
             "table_name": self.table_name,
