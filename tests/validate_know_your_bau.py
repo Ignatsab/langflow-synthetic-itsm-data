@@ -93,7 +93,9 @@ def main() -> None:
             for row in truth.to_dict(orient="records")
         ]
     )
-    evaluator.ground_truth = hidden_truth
+    unused_truth = hidden_truth.iloc[[0]].copy()
+    unused_truth["number"] = "INC9999999"
+    evaluator.ground_truth = pd.concat([hidden_truth, unused_truth], ignore_index=True)
     evaluator.predictions = predictions
     evaluator.id_field = "number"
     evaluator.target_fields = "category,ticket_type,required_skills,technology,support_level,assignment_group,agent_action"

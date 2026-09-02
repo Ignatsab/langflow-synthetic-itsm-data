@@ -419,6 +419,7 @@ class SyntheticDatasetGenerator(Component):
         if result["dry_run"]:
             return DataFrame(pd.DataFrame([{
                 "status": "dry_run",
+                "number": "DRY-RUN-00001",
                 "table_name": result["table_name"],
                 "requested_records": result["requested_records"],
                 "field_count": result["field_count"],

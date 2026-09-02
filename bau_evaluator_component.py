@@ -78,6 +78,10 @@ class BAUEvaluator(Component):
             str(row[id_field]): row
             for row in predicted.to_dict(orient="records")
         }
+        prediction_ids = set(predicted_by_id)
+        truth = truth.loc[truth[id_field].map(str).isin(prediction_ids)].reset_index(drop=True)
+        if truth.empty:
+            raise ValueError("No prediction IDs match the Hidden Ground Truth dataset.")
         targets = [field.strip() for field in str(self.target_fields or "").split(",") if field.strip()]
         breakdowns = [field.strip() for field in str(self.breakdown_fields or "").split(",") if field.strip()]
         scored: list[dict[str, Any]] = []

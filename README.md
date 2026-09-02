@@ -29,12 +29,12 @@ Import `know_your_bau_flow.json`. It contains five connected components:
    - support level (`L1`, `L2`, or `L3`)
    - assignment group
    - recommended agent action
-4. **Know Your BAU Evaluator** joins predictions to hidden truth by ticket number and reports prediction coverage, all-fields exact match, and per-field accuracy.
+4. **Know Your BAU Evaluator** receives the full generated dataset as hidden truth, restricts it to ticket IDs actually sent to the agent, and reports prediction coverage, all-fields exact match, and per-field accuracy.
 5. **Know Your BAU Evaluation Dashboard** renders an easy-to-read Markdown scorecard and provides separate tables for field performance, scenario performance, routing confusion, and failed tickets.
 
 Both LLM-powered components start in **Dry Run** mode. Enter the same OpenAI-compatible Base URL, API key, and model name in the generator and classification agent. Test each prompt preview, then disable Dry Run on both components.
 
-The Holdout Dataset Builder defaults to 10 randomly selected tickets with a fixed seed. It removes `category`, `subcategory`, `assignment_group`, and all `_expected_*` columns, preventing ground-truth leakage. Add other answer-bearing fields to **Additional Fields to Hide** when you customize the schema.
+The Holdout Dataset Builder defaults to 10 randomly selected tickets with a fixed seed. It removes `category`, `subcategory`, `assignment_group`, and all `_expected_*` columns, preventing ground-truth leakage. Add other answer-bearing fields to **Additional Fields to Hide** when you customize the schema. The evaluator independently receives the original generated dataset and keeps only rows whose ticket IDs occur in the agent predictions.
 
 The evaluator performs normalized exact matching. Arrays such as required skills are compared without regard to order or capitalization. Free-text fields such as agent action are therefore intentionally strict; use categorical action labels in the ground truth when you need stable automated scores.
 

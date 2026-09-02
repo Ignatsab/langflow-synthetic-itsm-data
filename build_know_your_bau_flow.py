@@ -85,14 +85,14 @@ def main() -> None:
             "Usage: build_know_your_bau_flow.py GENERATOR SPLITTER AGENT EVALUATOR DASHBOARD OUTPUT"
         )
     generator = build_node(sys.argv[1], "SyntheticDatasetGenerator", 80, 1100)
-    splitter = build_node(sys.argv[2], "HoldoutDatasetBuilder", 480, 1100)
+    splitter = build_node(sys.argv[2], "HoldoutDatasetBuilder", 480, 0)
     agent = build_node(sys.argv[3], "KnowYourBAUAgent", 880, 0)
     evaluator = build_node(sys.argv[4], "BAUEvaluator", 1280, 1100)
     dashboard = build_node(sys.argv[5], "BAUEvaluationDashboard", 1680, 1100)
     edges = [
         build_edge(generator, "dataset", splitter, "dataset"),
         build_edge(splitter, "tickets", agent, "tickets"),
-        build_edge(splitter, "ground_truth", evaluator, "ground_truth"),
+        build_edge(generator, "dataset", evaluator, "ground_truth"),
         build_edge(agent, "predictions", evaluator, "predictions"),
         build_edge(evaluator, "scored_tickets", dashboard, "scored_tickets"),
     ]
