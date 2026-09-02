@@ -10,7 +10,7 @@
         "data": {
           "description": "Generates schema-driven synthetic test data with an OpenAI-compatible LLM proxy.",
           "display_name": "Synthetic ITSM Dataset Generator",
-          "id": "SyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4f",
+          "id": "SyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720",
           "node": {
             "template": {
               "_type": "Component",
@@ -601,25 +601,25 @@
               }
             },
             "tool_mode": false,
-            "id": "SyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4f",
+            "id": "SyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720",
             "type": "SyntheticDatasetGenerator"
           },
           "selected_output": "dataset",
           "type": "SyntheticDatasetGenerator"
         },
         "dragging": false,
-        "id": "SyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4f",
+        "id": "SyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720",
         "measured": {
           "height": 760,
           "width": 320
         },
         "position": {
           "x": 80,
-          "y": 100
+          "y": 1100
         },
         "positionAbsolute": {
           "x": 80,
-          "y": 100
+          "y": 1100
         },
         "selected": false,
         "type": "genericNode"
@@ -628,7 +628,7 @@
         "data": {
           "description": "Selects a limited test sample and removes hidden ground-truth labels before classification.",
           "display_name": "BAU Holdout Dataset Builder",
-          "id": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
+          "id": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
           "node": {
             "template": {
               "_type": "Component",
@@ -872,25 +872,25 @@
               }
             },
             "tool_mode": false,
-            "id": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
+            "id": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
             "type": "HoldoutDatasetBuilder"
           },
           "selected_output": "tickets",
           "type": "HoldoutDatasetBuilder"
         },
         "dragging": false,
-        "id": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
+        "id": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
         "measured": {
           "height": 760,
           "width": 320
         },
         "position": {
           "x": 480,
-          "y": 100
+          "y": 1100
         },
         "positionAbsolute": {
           "x": 480,
-          "y": 100
+          "y": 1100
         },
         "selected": false,
         "type": "genericNode"
@@ -899,7 +899,7 @@
         "data": {
           "description": "Classifies holdout tickets and recommends skills, technology, support tier, and resolver group.",
           "display_name": "Know Your BAU Classification Agent",
-          "id": "KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95",
+          "id": "KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7",
           "node": {
             "template": {
               "_type": "Component",
@@ -1297,25 +1297,25 @@
               }
             },
             "tool_mode": false,
-            "id": "KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95",
+            "id": "KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7",
             "type": "KnowYourBAUAgent"
           },
           "selected_output": "predictions",
           "type": "KnowYourBAUAgent"
         },
         "dragging": false,
-        "id": "KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95",
+        "id": "KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7",
         "measured": {
           "height": 760,
           "width": 320
         },
         "position": {
           "x": 880,
-          "y": 100
+          "y": 0
         },
         "positionAbsolute": {
           "x": 880,
-          "y": 100
+          "y": 0
         },
         "selected": false,
         "type": "genericNode"
@@ -1324,7 +1324,7 @@
         "data": {
           "description": "Compares BAU predictions with hidden synthetic ground truth and calculates evaluation metrics.",
           "display_name": "Know Your BAU Evaluator",
-          "id": "BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932",
+          "id": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
           "node": {
             "template": {
               "_type": "Component",
@@ -1380,6 +1380,28 @@
                 "type": "other",
                 "_input_type": "DataFrameInput"
               },
+              "breakdown_fields": {
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "load_from_db": false,
+                "list": false,
+                "list_add_label": "Add More",
+                "override_skip": false,
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "name": "breakdown_fields",
+                "value": "_test_scenario,state,priority",
+                "display_name": "Fields Preserved for Dashboard Breakdowns",
+                "advanced": false,
+                "api_editable": false,
+                "dynamic": false,
+                "info": "Comma-separated ground-truth context fields copied into scored results but not used as prediction targets.",
+                "title_case": false,
+                "track_in_telemetry": false,
+                "type": "str",
+                "_input_type": "StrInput"
+              },
               "code": {
                 "type": "code",
                 "required": true,
@@ -1387,7 +1409,7 @@
                 "list": false,
                 "show": true,
                 "multiline": true,
-                "value": "import json\nfrom typing import Any\n\nimport pandas as pd\n\nfrom lfx.custom import Component\nfrom lfx.io import DataFrameInput, Output, StrInput\nfrom lfx.schema import Data, DataFrame, Message\n\n\nclass BAUEvaluator(Component):\n    display_name = \"Know Your BAU Evaluator\"\n    description = \"Compares BAU predictions with hidden synthetic ground truth and calculates evaluation metrics.\"\n    icon = \"ChartNoAxesCombined\"\n    name = \"BAUEvaluator\"\n\n    inputs = [\n        DataFrameInput(name=\"ground_truth\", display_name=\"Hidden Ground Truth\", required=True),\n        DataFrameInput(name=\"predictions\", display_name=\"BAU Predictions\", required=True),\n        StrInput(name=\"id_field\", display_name=\"Ticket ID Field\", value=\"number\"),\n        StrInput(\n            name=\"target_fields\",\n            display_name=\"Fields to Score\",\n            value=\"category,ticket_type,required_skills,technology,support_level,assignment_group,agent_action\",\n        ),\n    ]\n\n    outputs = [\n        Output(display_name=\"Scored Tickets\", name=\"scored_tickets\", method=\"build_scored_tickets\"),\n        Output(display_name=\"Evaluation Metrics\", name=\"metrics\", method=\"build_metrics\"),\n        Output(display_name=\"Evaluation Summary\", name=\"summary\", method=\"build_summary\"),\n    ]\n\n    @staticmethod\n    def _normalize(value: Any) -> Any:\n        if value is None or (isinstance(value, float) and pd.isna(value)):\n            return None\n        if isinstance(value, str):\n            stripped = value.strip()\n            if stripped.startswith(\"[\") and stripped.endswith(\"]\"):\n                try:\n                    return BAUEvaluator._normalize(json.loads(stripped))\n                except json.JSONDecodeError:\n                    pass\n            return \" \".join(stripped.casefold().split())\n        if isinstance(value, (list, tuple, set)):\n            normalized = [BAUEvaluator._normalize(item) for item in value]\n            return sorted((item for item in normalized if item is not None), key=str)\n        if isinstance(value, dict):\n            return {key: BAUEvaluator._normalize(item) for key, item in sorted(value.items())}\n        return value\n\n    def _evaluate(self) -> tuple[pd.DataFrame, dict[str, Any]]:\n        cached = getattr(self, \"_evaluation_cache\", None)\n        if cached is not None:\n            return cached\n        truth = pd.DataFrame(self.ground_truth).copy()\n        predicted = pd.DataFrame(self.predictions).copy()\n        if truth.empty:\n            raise ValueError(\"Hidden Ground Truth is empty.\")\n        if predicted.empty:\n            raise ValueError(\"BAU Predictions is empty.\")\n        id_field = str(self.id_field or \"number\").strip()\n        if id_field not in truth.columns or id_field not in predicted.columns:\n            if \"_evaluation_id\" in truth.columns and \"_evaluation_id\" in predicted.columns:\n                id_field = \"_evaluation_id\"\n                self.id_field = id_field\n            else:\n                raise ValueError(f\"Ticket ID field '{id_field}' must exist in ground truth and predictions.\")\n\n        predicted_by_id = {\n            str(row[id_field]): row\n            for row in predicted.to_dict(orient=\"records\")\n        }\n        targets = [field.strip() for field in str(self.target_fields or \"\").split(\",\") if field.strip()]\n        scored: list[dict[str, Any]] = []\n        correct_counts = {field: 0 for field in targets}\n        covered_counts = {field: 0 for field in targets}\n\n        for truth_row in truth.to_dict(orient=\"records\"):\n            ticket_id = str(truth_row[id_field])\n            prediction = predicted_by_id.get(ticket_id, {})\n            row: dict[str, Any] = {id_field: truth_row[id_field], \"prediction_received\": bool(prediction)}\n            all_correct = bool(prediction)\n            for field in targets:\n                expected_key = f\"_expected_{field}\"\n                expected = truth_row.get(expected_key, truth_row.get(field))\n                actual = prediction.get(field)\n                covered = actual is not None and not (isinstance(actual, float) and pd.isna(actual))\n                correct = covered and self._normalize(expected) == self._normalize(actual)\n                row[f\"expected_{field}\"] = expected\n                row[f\"predicted_{field}\"] = actual\n                row[f\"correct_{field}\"] = correct\n                covered_counts[field] += int(covered)\n                correct_counts[field] += int(correct)\n                all_correct = all_correct and correct\n            row[\"all_fields_correct\"] = all_correct\n            scored.append(row)\n\n        total = len(scored)\n        metrics = {\n            \"ticket_count\": total,\n            \"prediction_coverage\": sum(int(row[\"prediction_received\"]) for row in scored) / total,\n            \"overall_exact_match\": sum(int(row[\"all_fields_correct\"]) for row in scored) / total,\n            \"fields\": {\n                field: {\n                    \"accuracy\": correct_counts[field] / total,\n                    \"coverage\": covered_counts[field] / total,\n                    \"correct\": correct_counts[field],\n                    \"total\": total,\n                }\n                for field in targets\n            },\n        }\n        self._evaluation_cache = (pd.DataFrame(scored), metrics)\n        return self._evaluation_cache\n\n    def build_scored_tickets(self) -> DataFrame:\n        scored, _ = self._evaluate()\n        return DataFrame(scored)\n\n    def build_metrics(self) -> Data:\n        _, metrics = self._evaluate()\n        return Data(data=metrics)\n\n    def build_summary(self) -> Message:\n        _, metrics = self._evaluate()\n        field_lines = \", \".join(\n            f\"{field}: {details['accuracy']:.1%}\"\n            for field, details in metrics[\"fields\"].items()\n        )\n        return Message(\n            text=(\n                f\"Know Your BAU evaluation: {metrics['ticket_count']} tickets, \"\n                f\"{metrics['prediction_coverage']:.1%} prediction coverage, \"\n                f\"{metrics['overall_exact_match']:.1%} all-fields exact match. \"\n                f\"Per-field accuracy — {field_lines}.\"\n            )\n        )\n",
+                "value": "import json\nfrom typing import Any\n\nimport pandas as pd\n\nfrom lfx.custom import Component\nfrom lfx.io import DataFrameInput, Output, StrInput\nfrom lfx.schema import Data, DataFrame, Message\n\n\nclass BAUEvaluator(Component):\n    display_name = \"Know Your BAU Evaluator\"\n    description = \"Compares BAU predictions with hidden synthetic ground truth and calculates evaluation metrics.\"\n    icon = \"ChartNoAxesCombined\"\n    name = \"BAUEvaluator\"\n\n    inputs = [\n        DataFrameInput(name=\"ground_truth\", display_name=\"Hidden Ground Truth\", required=True),\n        DataFrameInput(name=\"predictions\", display_name=\"BAU Predictions\", required=True),\n        StrInput(name=\"id_field\", display_name=\"Ticket ID Field\", value=\"number\"),\n        StrInput(\n            name=\"target_fields\",\n            display_name=\"Fields to Score\",\n            value=\"category,ticket_type,required_skills,technology,support_level,assignment_group,agent_action\",\n        ),\n        StrInput(\n            name=\"breakdown_fields\",\n            display_name=\"Fields Preserved for Dashboard Breakdowns\",\n            value=\"_test_scenario,state,priority\",\n            info=\"Comma-separated ground-truth context fields copied into scored results but not used as prediction targets.\",\n        ),\n    ]\n\n    outputs = [\n        Output(display_name=\"Scored Tickets\", name=\"scored_tickets\", method=\"build_scored_tickets\"),\n        Output(display_name=\"Evaluation Metrics\", name=\"metrics\", method=\"build_metrics\"),\n        Output(display_name=\"Evaluation Summary\", name=\"summary\", method=\"build_summary\"),\n    ]\n\n    @staticmethod\n    def _normalize(value: Any) -> Any:\n        if value is None or (isinstance(value, float) and pd.isna(value)):\n            return None\n        if isinstance(value, str):\n            stripped = value.strip()\n            if stripped.startswith(\"[\") and stripped.endswith(\"]\"):\n                try:\n                    return BAUEvaluator._normalize(json.loads(stripped))\n                except json.JSONDecodeError:\n                    pass\n            return \" \".join(stripped.casefold().split())\n        if isinstance(value, (list, tuple, set)):\n            normalized = [BAUEvaluator._normalize(item) for item in value]\n            return sorted((item for item in normalized if item is not None), key=str)\n        if isinstance(value, dict):\n            return {key: BAUEvaluator._normalize(item) for key, item in sorted(value.items())}\n        return value\n\n    def _evaluate(self) -> tuple[pd.DataFrame, dict[str, Any]]:\n        cached = getattr(self, \"_evaluation_cache\", None)\n        if cached is not None:\n            return cached\n        truth = pd.DataFrame(self.ground_truth).copy()\n        predicted = pd.DataFrame(self.predictions).copy()\n        if truth.empty:\n            raise ValueError(\"Hidden Ground Truth is empty.\")\n        if predicted.empty:\n            raise ValueError(\"BAU Predictions is empty.\")\n        id_field = str(self.id_field or \"number\").strip()\n        if id_field not in truth.columns or id_field not in predicted.columns:\n            if \"_evaluation_id\" in truth.columns and \"_evaluation_id\" in predicted.columns:\n                id_field = \"_evaluation_id\"\n                self.id_field = id_field\n            else:\n                raise ValueError(f\"Ticket ID field '{id_field}' must exist in ground truth and predictions.\")\n\n        predicted_by_id = {\n            str(row[id_field]): row\n            for row in predicted.to_dict(orient=\"records\")\n        }\n        targets = [field.strip() for field in str(self.target_fields or \"\").split(\",\") if field.strip()]\n        breakdowns = [field.strip() for field in str(self.breakdown_fields or \"\").split(\",\") if field.strip()]\n        scored: list[dict[str, Any]] = []\n        correct_counts = {field: 0 for field in targets}\n        covered_counts = {field: 0 for field in targets}\n\n        for truth_row in truth.to_dict(orient=\"records\"):\n            ticket_id = str(truth_row[id_field])\n            prediction = predicted_by_id.get(ticket_id, {})\n            row: dict[str, Any] = {id_field: truth_row[id_field], \"prediction_received\": bool(prediction)}\n            for field in breakdowns:\n                if field in truth_row:\n                    row[field] = truth_row.get(field)\n            all_correct = bool(prediction)\n            for field in targets:\n                expected_key = f\"_expected_{field}\"\n                expected = truth_row.get(expected_key, truth_row.get(field))\n                actual = prediction.get(field)\n                covered = actual is not None and not (isinstance(actual, float) and pd.isna(actual))\n                correct = covered and self._normalize(expected) == self._normalize(actual)\n                row[f\"expected_{field}\"] = expected\n                row[f\"predicted_{field}\"] = actual\n                row[f\"correct_{field}\"] = correct\n                covered_counts[field] += int(covered)\n                correct_counts[field] += int(correct)\n                all_correct = all_correct and correct\n            row[\"all_fields_correct\"] = all_correct\n            scored.append(row)\n\n        total = len(scored)\n        metrics = {\n            \"ticket_count\": total,\n            \"prediction_coverage\": sum(int(row[\"prediction_received\"]) for row in scored) / total,\n            \"overall_exact_match\": sum(int(row[\"all_fields_correct\"]) for row in scored) / total,\n            \"fields\": {\n                field: {\n                    \"accuracy\": correct_counts[field] / total,\n                    \"coverage\": covered_counts[field] / total,\n                    \"correct\": correct_counts[field],\n                    \"total\": total,\n                }\n                for field in targets\n            },\n        }\n        self._evaluation_cache = (pd.DataFrame(scored), metrics)\n        return self._evaluation_cache\n\n    def build_scored_tickets(self) -> DataFrame:\n        scored, _ = self._evaluate()\n        return DataFrame(scored)\n\n    def build_metrics(self) -> Data:\n        _, metrics = self._evaluate()\n        return Data(data=metrics)\n\n    def build_summary(self) -> Message:\n        _, metrics = self._evaluate()\n        field_lines = \", \".join(\n            f\"{field}: {details['accuracy']:.1%}\"\n            for field, details in metrics[\"fields\"].items()\n        )\n        return Message(\n            text=(\n                f\"Know Your BAU evaluation: {metrics['ticket_count']} tickets, \"\n                f\"{metrics['prediction_coverage']:.1%} prediction coverage, \"\n                f\"{metrics['overall_exact_match']:.1%} all-fields exact match. \"\n                f\"Per-field accuracy — {field_lines}.\"\n            )\n        )\n",
                 "fileTypes": [],
                 "file_path": "",
                 "password": false,
@@ -1507,14 +1529,15 @@
               "ground_truth",
               "predictions",
               "id_field",
-              "target_fields"
+              "target_fields",
+              "breakdown_fields"
             ],
             "beta": false,
             "legacy": false,
             "edited": false,
             "metadata": {
               "module": "custom_components.know_your_bau_evaluator",
-              "code_hash": "182f0778fc34",
+              "code_hash": "c1470049874b",
               "dependencies": {
                 "total_dependencies": 2,
                 "dependencies": [
@@ -1530,25 +1553,280 @@
               }
             },
             "tool_mode": false,
-            "id": "BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932",
+            "id": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
             "type": "BAUEvaluator"
           },
           "selected_output": "scored_tickets",
           "type": "BAUEvaluator"
         },
         "dragging": false,
-        "id": "BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932",
+        "id": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
         "measured": {
           "height": 760,
           "width": 320
         },
         "position": {
           "x": 1280,
-          "y": 100
+          "y": 1100
         },
         "positionAbsolute": {
           "x": 1280,
-          "y": 100
+          "y": 1100
+        },
+        "selected": false,
+        "type": "genericNode"
+      },
+      {
+        "data": {
+          "description": "Turns scored BAU tickets into visual Markdown, performance tables, confusion data, and failure analysis.",
+          "display_name": "Know Your BAU Evaluation Dashboard",
+          "id": "BAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134",
+          "node": {
+            "template": {
+              "_type": "Component",
+              "scored_tickets": {
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "list": false,
+                "list_add_label": "Add More",
+                "trace_as_input": true,
+                "override_skip": false,
+                "required": true,
+                "placeholder": "",
+                "show": true,
+                "name": "scored_tickets",
+                "value": "",
+                "display_name": "Scored Tickets",
+                "advanced": false,
+                "api_editable": false,
+                "input_types": [
+                  "DataFrame",
+                  "Table"
+                ],
+                "dynamic": false,
+                "info": "",
+                "title_case": false,
+                "track_in_telemetry": false,
+                "type": "other",
+                "_input_type": "DataFrameInput"
+              },
+              "code": {
+                "type": "code",
+                "required": true,
+                "placeholder": "",
+                "list": false,
+                "show": true,
+                "multiline": true,
+                "value": "from typing import Any\n\nimport pandas as pd\n\nfrom lfx.custom import Component\nfrom lfx.io import DataFrameInput, IntInput, Output, StrInput\nfrom lfx.schema import DataFrame, Message\nfrom lfx.schema.properties import Properties\n\n\nclass BAUEvaluationDashboard(Component):\n    display_name = \"Know Your BAU Evaluation Dashboard\"\n    description = \"Turns scored BAU tickets into visual Markdown, performance tables, confusion data, and failure analysis.\"\n    icon = \"ChartColumnBig\"\n    name = \"BAUEvaluationDashboard\"\n\n    inputs = [\n        DataFrameInput(name=\"scored_tickets\", display_name=\"Scored Tickets\", required=True),\n        StrInput(name=\"scenario_field\", display_name=\"Scenario Breakdown Field\", value=\"_test_scenario\"),\n        StrInput(name=\"confusion_field\", display_name=\"Confusion Matrix Field\", value=\"assignment_group\"),\n        IntInput(name=\"failure_limit\", display_name=\"Maximum Failures to Show\", value=20, advanced=True),\n    ]\n\n    outputs = [\n        Output(display_name=\"Dashboard\", name=\"dashboard\", method=\"build_dashboard\"),\n        Output(display_name=\"Field Performance\", name=\"field_performance\", method=\"build_field_performance\"),\n        Output(display_name=\"Scenario Performance\", name=\"scenario_performance\", method=\"build_scenario_performance\"),\n        Output(display_name=\"Confusion Matrix Data\", name=\"confusion_matrix\", method=\"build_confusion_matrix\"),\n        Output(display_name=\"Failed Tickets\", name=\"failed_tickets\", method=\"build_failed_tickets\"),\n    ]\n\n    @staticmethod\n    def _present(value: Any) -> bool:\n        if value is None:\n            return False\n        if isinstance(value, float) and pd.isna(value):\n            return False\n        return True\n\n    @staticmethod\n    def _bar(value: float, width: int = 12) -> str:\n        filled = min(max(round(value * width), 0), width)\n        return \"█\" * filled + \"░\" * (width - filled)\n\n    def _analyze(self) -> dict[str, Any]:\n        cached = getattr(self, \"_dashboard_cache\", None)\n        if cached is not None:\n            return cached\n        frame = pd.DataFrame(self.scored_tickets).copy()\n        if frame.empty:\n            raise ValueError(\"Scored Tickets is empty.\")\n\n        correct_columns = [column for column in frame.columns if str(column).startswith(\"correct_\")]\n        if not correct_columns:\n            raise ValueError(\"Scored Tickets has no correct_* evaluation columns.\")\n        fields = [str(column)[len(\"correct_\") :] for column in correct_columns]\n        total = len(frame)\n        prediction_coverage = (\n            float(frame[\"prediction_received\"].fillna(False).astype(bool).mean())\n            if \"prediction_received\" in frame.columns\n            else 0.0\n        )\n        overall = (\n            float(frame[\"all_fields_correct\"].fillna(False).astype(bool).mean())\n            if \"all_fields_correct\" in frame.columns\n            else 0.0\n        )\n\n        field_rows: list[dict[str, Any]] = []\n        for field in fields:\n            correct = frame[f\"correct_{field}\"].fillna(False).astype(bool)\n            predicted_column = f\"predicted_{field}\"\n            if predicted_column in frame.columns:\n                coverage = frame[predicted_column].map(self._present)\n            else:\n                coverage = pd.Series([False] * total)\n            field_rows.append(\n                {\n                    \"field\": field,\n                    \"accuracy\": float(correct.mean()),\n                    \"coverage\": float(coverage.mean()),\n                    \"correct\": int(correct.sum()),\n                    \"total\": total,\n                }\n            )\n        field_performance = pd.DataFrame(field_rows).sort_values([\"accuracy\", \"field\"]).reset_index(drop=True)\n\n        scenario_field = str(self.scenario_field or \"_test_scenario\").strip()\n        scenario_rows: list[dict[str, Any]] = []\n        if scenario_field in frame.columns:\n            scenario_values = frame[scenario_field].where(frame[scenario_field].notna(), \"Unspecified\")\n            for scenario, group in frame.assign(_scenario_value=scenario_values).groupby(\"_scenario_value\", dropna=False):\n                scenario_rows.append(\n                    {\n                        \"scenario\": scenario,\n                        \"tickets\": len(group),\n                        \"prediction_coverage\": float(group[\"prediction_received\"].fillna(False).astype(bool).mean()),\n                        \"all_fields_exact_match\": float(group[\"all_fields_correct\"].fillna(False).astype(bool).mean()),\n                        \"average_field_accuracy\": float(group[correct_columns].fillna(False).astype(bool).mean(axis=1).mean()),\n                    }\n                )\n        scenario_performance = pd.DataFrame(scenario_rows)\n\n        confusion_field = str(self.confusion_field or \"assignment_group\").strip()\n        expected_column = f\"expected_{confusion_field}\"\n        predicted_column = f\"predicted_{confusion_field}\"\n        if expected_column in frame.columns and predicted_column in frame.columns:\n            confusion = (\n                frame.assign(\n                    expected=frame[expected_column].map(lambda value: str(value) if self._present(value) else \"Missing\"),\n                    predicted=frame[predicted_column].map(lambda value: str(value) if self._present(value) else \"Missing\"),\n                )\n                .groupby([\"expected\", \"predicted\"], dropna=False)\n                .size()\n                .reset_index(name=\"tickets\")\n                .sort_values(\"tickets\", ascending=False)\n                .reset_index(drop=True)\n            )\n        else:\n            confusion = pd.DataFrame(columns=[\"expected\", \"predicted\", \"tickets\"])\n\n        failures = frame.loc[~frame[\"all_fields_correct\"].fillna(False).astype(bool)].copy()\n        failure_columns = [\n            column\n            for column in frame.columns\n            if column in {scenario_field, \"prediction_received\"}\n            or str(column).startswith(\"expected_\")\n            or str(column).startswith(\"predicted_\")\n            or str(column).startswith(\"correct_\")\n        ]\n        id_candidates = [column for column in frame.columns if column in {\"number\", \"sys_id\", \"_evaluation_id\"}]\n        failures = failures[id_candidates + failure_columns].head(max(int(self.failure_limit), 1)).reset_index(drop=True)\n\n        self._dashboard_cache = {\n            \"total\": total,\n            \"prediction_coverage\": prediction_coverage,\n            \"overall\": overall,\n            \"field_performance\": field_performance,\n            \"scenario_performance\": scenario_performance,\n            \"confusion\": confusion,\n            \"failures\": failures,\n        }\n        return self._dashboard_cache\n\n    def build_dashboard(self) -> Message:\n        result = self._analyze()\n        lines = [\n            \"# Know Your BAU Evaluation\",\n            \"\",\n            \"| Measure | Result | Visual |\",\n            \"|---|---:|:---|\",\n            f\"| Tickets evaluated | {result['total']} | |\",\n            f\"| Prediction coverage | {result['prediction_coverage']:.1%} | `{self._bar(result['prediction_coverage'])}` |\",\n            f\"| All-fields exact match | {result['overall']:.1%} | `{self._bar(result['overall'])}` |\",\n            \"\",\n            \"## Field performance\",\n            \"\",\n            \"| Field | Accuracy | Coverage | Accuracy bar |\",\n            \"|---|---:|---:|:---|\",\n        ]\n        for row in result[\"field_performance\"].to_dict(orient=\"records\"):\n            lines.append(\n                f\"| {row['field']} | {row['accuracy']:.1%} | {row['coverage']:.1%} | `{self._bar(row['accuracy'])}` |\"\n            )\n        if not result[\"scenario_performance\"].empty:\n            lines.extend(\n                [\n                    \"\",\n                    \"## Scenario performance\",\n                    \"\",\n                    \"| Scenario | Tickets | Average field accuracy | All-fields match |\",\n                    \"|---|---:|---:|---:|\",\n                ]\n            )\n            for row in result[\"scenario_performance\"].to_dict(orient=\"records\"):\n                lines.append(\n                    f\"| {row['scenario']} | {row['tickets']} | {row['average_field_accuracy']:.1%} | \"\n                    f\"{row['all_fields_exact_match']:.1%} |\"\n                )\n        lines.extend(\n            [\n                \"\",\n                f\"Failed tickets shown in the **Failed Tickets** output: {len(result['failures'])}.\",\n                \"Use **Confusion Matrix Data** to inspect the most common routing substitutions.\",\n            ]\n        )\n        return Message(text=\"\\n\".join(lines), properties=Properties(allow_markdown=True))\n\n    def build_field_performance(self) -> DataFrame:\n        return DataFrame(self._analyze()[\"field_performance\"])\n\n    def build_scenario_performance(self) -> DataFrame:\n        return DataFrame(self._analyze()[\"scenario_performance\"])\n\n    def build_confusion_matrix(self) -> DataFrame:\n        return DataFrame(self._analyze()[\"confusion\"])\n\n    def build_failed_tickets(self) -> DataFrame:\n        return DataFrame(self._analyze()[\"failures\"])\n",
+                "fileTypes": [],
+                "file_path": "",
+                "password": false,
+                "name": "code",
+                "advanced": true,
+                "api_editable": false,
+                "dynamic": true,
+                "info": "",
+                "load_from_db": false,
+                "title_case": false
+              },
+              "confusion_field": {
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "load_from_db": false,
+                "list": false,
+                "list_add_label": "Add More",
+                "override_skip": false,
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "name": "confusion_field",
+                "value": "assignment_group",
+                "display_name": "Confusion Matrix Field",
+                "advanced": false,
+                "api_editable": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false,
+                "track_in_telemetry": false,
+                "type": "str",
+                "_input_type": "StrInput"
+              },
+              "failure_limit": {
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "list": false,
+                "list_add_label": "Add More",
+                "override_skip": false,
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "name": "failure_limit",
+                "value": 20,
+                "display_name": "Maximum Failures to Show",
+                "advanced": true,
+                "api_editable": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false,
+                "track_in_telemetry": true,
+                "type": "int",
+                "_input_type": "IntInput"
+              },
+              "scenario_field": {
+                "tool_mode": false,
+                "trace_as_metadata": true,
+                "load_from_db": false,
+                "list": false,
+                "list_add_label": "Add More",
+                "override_skip": false,
+                "required": false,
+                "placeholder": "",
+                "show": true,
+                "name": "scenario_field",
+                "value": "_test_scenario",
+                "display_name": "Scenario Breakdown Field",
+                "advanced": false,
+                "api_editable": false,
+                "dynamic": false,
+                "info": "",
+                "title_case": false,
+                "track_in_telemetry": false,
+                "type": "str",
+                "_input_type": "StrInput"
+              }
+            },
+            "description": "Turns scored BAU tickets into visual Markdown, performance tables, confusion data, and failure analysis.",
+            "icon": "ChartColumnBig",
+            "base_classes": [
+              "Message",
+              "Table"
+            ],
+            "display_name": "Know Your BAU Evaluation Dashboard",
+            "documentation": "",
+            "minimized": false,
+            "custom_fields": {},
+            "output_types": [],
+            "pinned": false,
+            "conditional_paths": [],
+            "frozen": false,
+            "outputs": [
+              {
+                "types": [
+                  "Message"
+                ],
+                "selected": "Message",
+                "name": "dashboard",
+                "display_name": "Dashboard",
+                "method": "build_dashboard",
+                "value": "__UNDEFINED__",
+                "cache": true,
+                "allows_loop": false,
+                "group_outputs": false,
+                "tool_mode": true
+              },
+              {
+                "types": [
+                  "Table"
+                ],
+                "selected": "Table",
+                "name": "field_performance",
+                "display_name": "Field Performance",
+                "method": "build_field_performance",
+                "value": "__UNDEFINED__",
+                "cache": true,
+                "allows_loop": false,
+                "group_outputs": false,
+                "tool_mode": true
+              },
+              {
+                "types": [
+                  "Table"
+                ],
+                "selected": "Table",
+                "name": "scenario_performance",
+                "display_name": "Scenario Performance",
+                "method": "build_scenario_performance",
+                "value": "__UNDEFINED__",
+                "cache": true,
+                "allows_loop": false,
+                "group_outputs": false,
+                "tool_mode": true
+              },
+              {
+                "types": [
+                  "Table"
+                ],
+                "selected": "Table",
+                "name": "confusion_matrix",
+                "display_name": "Confusion Matrix Data",
+                "method": "build_confusion_matrix",
+                "value": "__UNDEFINED__",
+                "cache": true,
+                "allows_loop": false,
+                "group_outputs": false,
+                "tool_mode": true
+              },
+              {
+                "types": [
+                  "Table"
+                ],
+                "selected": "Table",
+                "name": "failed_tickets",
+                "display_name": "Failed Tickets",
+                "method": "build_failed_tickets",
+                "value": "__UNDEFINED__",
+                "cache": true,
+                "allows_loop": false,
+                "group_outputs": false,
+                "tool_mode": true
+              }
+            ],
+            "field_order": [
+              "scored_tickets",
+              "scenario_field",
+              "confusion_field",
+              "failure_limit"
+            ],
+            "beta": false,
+            "legacy": false,
+            "edited": false,
+            "metadata": {
+              "module": "custom_components.know_your_bau_evaluation_dashboard",
+              "code_hash": "3903ff9abe30",
+              "dependencies": {
+                "total_dependencies": 2,
+                "dependencies": [
+                  {
+                    "name": "pandas",
+                    "version": "2.3.3"
+                  },
+                  {
+                    "name": "lfx",
+                    "version": "1.11.5"
+                  }
+                ]
+              }
+            },
+            "tool_mode": false,
+            "id": "BAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134",
+            "type": "BAUEvaluationDashboard"
+          },
+          "selected_output": "dashboard",
+          "type": "BAUEvaluationDashboard"
+        },
+        "dragging": false,
+        "id": "BAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134",
+        "measured": {
+          "height": 760,
+          "width": 320
+        },
+        "position": {
+          "x": 1680,
+          "y": 1100
+        },
+        "positionAbsolute": {
+          "x": 1680,
+          "y": 1100
         },
         "selected": false,
         "type": "genericNode"
@@ -1561,7 +1839,7 @@
         "data": {
           "sourceHandle": {
             "dataType": "SyntheticDatasetGenerator",
-            "id": "SyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4f",
+            "id": "SyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720",
             "name": "dataset",
             "output_types": [
               "Table"
@@ -1569,7 +1847,7 @@
           },
           "targetHandle": {
             "fieldName": "dataset",
-            "id": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
+            "id": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
             "inputTypes": [
               "DataFrame",
               "Table"
@@ -1577,12 +1855,12 @@
             "type": "other"
           }
         },
-        "id": "reactflow__edge-SyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4f{œdataTypeœ: œSyntheticDatasetGeneratorœ, œidœ: œSyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4fœ, œnameœ: œdatasetœ, œoutput_typesœ: [œTableœ]}-HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde{œfieldNameœ: œdatasetœ, œidœ: œHoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfdeœ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
+        "id": "reactflow__edge-SyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720{œdataTypeœ: œSyntheticDatasetGeneratorœ, œidœ: œSyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720œ, œnameœ: œdatasetœ, œoutput_typesœ: [œTableœ]}-HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4{œfieldNameœ: œdatasetœ, œidœ: œHoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
         "selected": false,
-        "source": "SyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4f",
-        "sourceHandle": "{œdataTypeœ: œSyntheticDatasetGeneratorœ, œidœ: œSyntheticDatasetGenerator-58a75f59-38c6-4184-90eb-14221f429c4fœ, œnameœ: œdatasetœ, œoutput_typesœ: [œTableœ]}",
-        "target": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
-        "targetHandle": "{œfieldNameœ: œdatasetœ, œidœ: œHoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfdeœ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
+        "source": "SyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720",
+        "sourceHandle": "{œdataTypeœ: œSyntheticDatasetGeneratorœ, œidœ: œSyntheticDatasetGenerator-2bd08702-cc45-494a-ad25-4e752bb87720œ, œnameœ: œdatasetœ, œoutput_typesœ: [œTableœ]}",
+        "target": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
+        "targetHandle": "{œfieldNameœ: œdatasetœ, œidœ: œHoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
       },
       {
         "animated": false,
@@ -1590,7 +1868,7 @@
         "data": {
           "sourceHandle": {
             "dataType": "HoldoutDatasetBuilder",
-            "id": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
+            "id": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
             "name": "tickets",
             "output_types": [
               "Table"
@@ -1598,7 +1876,7 @@
           },
           "targetHandle": {
             "fieldName": "tickets",
-            "id": "KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95",
+            "id": "KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7",
             "inputTypes": [
               "DataFrame",
               "Table"
@@ -1606,12 +1884,12 @@
             "type": "other"
           }
         },
-        "id": "reactflow__edge-HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfdeœ, œnameœ: œticketsœ, œoutput_typesœ: [œTableœ]}-KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95{œfieldNameœ: œticketsœ, œidœ: œKnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
+        "id": "reactflow__edge-HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4œ, œnameœ: œticketsœ, œoutput_typesœ: [œTableœ]}-KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7{œfieldNameœ: œticketsœ, œidœ: œKnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
         "selected": false,
-        "source": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
-        "sourceHandle": "{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfdeœ, œnameœ: œticketsœ, œoutput_typesœ: [œTableœ]}",
-        "target": "KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95",
-        "targetHandle": "{œfieldNameœ: œticketsœ, œidœ: œKnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
+        "source": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
+        "sourceHandle": "{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4œ, œnameœ: œticketsœ, œoutput_typesœ: [œTableœ]}",
+        "target": "KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7",
+        "targetHandle": "{œfieldNameœ: œticketsœ, œidœ: œKnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
       },
       {
         "animated": false,
@@ -1619,7 +1897,7 @@
         "data": {
           "sourceHandle": {
             "dataType": "HoldoutDatasetBuilder",
-            "id": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
+            "id": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
             "name": "ground_truth",
             "output_types": [
               "Table"
@@ -1627,7 +1905,7 @@
           },
           "targetHandle": {
             "fieldName": "ground_truth",
-            "id": "BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932",
+            "id": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
             "inputTypes": [
               "DataFrame",
               "Table"
@@ -1635,12 +1913,12 @@
             "type": "other"
           }
         },
-        "id": "reactflow__edge-HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfdeœ, œnameœ: œground_truthœ, œoutput_typesœ: [œTableœ]}-BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932{œfieldNameœ: œground_truthœ, œidœ: œBAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
+        "id": "reactflow__edge-HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4œ, œnameœ: œground_truthœ, œoutput_typesœ: [œTableœ]}-BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f{œfieldNameœ: œground_truthœ, œidœ: œBAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610fœ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
         "selected": false,
-        "source": "HoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfde",
-        "sourceHandle": "{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-d3e03c11-75c6-442e-9dd2-ad641d9acfdeœ, œnameœ: œground_truthœ, œoutput_typesœ: [œTableœ]}",
-        "target": "BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932",
-        "targetHandle": "{œfieldNameœ: œground_truthœ, œidœ: œBAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
+        "source": "HoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4",
+        "sourceHandle": "{œdataTypeœ: œHoldoutDatasetBuilderœ, œidœ: œHoldoutDatasetBuilder-a3b5056c-d4de-4e63-b47c-48eb3ca375d4œ, œnameœ: œground_truthœ, œoutput_typesœ: [œTableœ]}",
+        "target": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
+        "targetHandle": "{œfieldNameœ: œground_truthœ, œidœ: œBAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610fœ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
       },
       {
         "animated": false,
@@ -1648,7 +1926,7 @@
         "data": {
           "sourceHandle": {
             "dataType": "KnowYourBAUAgent",
-            "id": "KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95",
+            "id": "KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7",
             "name": "predictions",
             "output_types": [
               "Table"
@@ -1656,7 +1934,7 @@
           },
           "targetHandle": {
             "fieldName": "predictions",
-            "id": "BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932",
+            "id": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
             "inputTypes": [
               "DataFrame",
               "Table"
@@ -1664,18 +1942,47 @@
             "type": "other"
           }
         },
-        "id": "reactflow__edge-KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95{œdataTypeœ: œKnowYourBAUAgentœ, œidœ: œKnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95œ, œnameœ: œpredictionsœ, œoutput_typesœ: [œTableœ]}-BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932{œfieldNameœ: œpredictionsœ, œidœ: œBAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
+        "id": "reactflow__edge-KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7{œdataTypeœ: œKnowYourBAUAgentœ, œidœ: œKnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7œ, œnameœ: œpredictionsœ, œoutput_typesœ: [œTableœ]}-BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f{œfieldNameœ: œpredictionsœ, œidœ: œBAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610fœ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
         "selected": false,
-        "source": "KnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95",
-        "sourceHandle": "{œdataTypeœ: œKnowYourBAUAgentœ, œidœ: œKnowYourBAUAgent-6ad3ea57-be00-4072-919f-eeec01c45b95œ, œnameœ: œpredictionsœ, œoutput_typesœ: [œTableœ]}",
-        "target": "BAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932",
-        "targetHandle": "{œfieldNameœ: œpredictionsœ, œidœ: œBAUEvaluator-91b892da-c467-4ae6-9824-cf06dc9a3932œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
+        "source": "KnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7",
+        "sourceHandle": "{œdataTypeœ: œKnowYourBAUAgentœ, œidœ: œKnowYourBAUAgent-140c0062-4739-4474-bc96-8af9f23747b7œ, œnameœ: œpredictionsœ, œoutput_typesœ: [œTableœ]}",
+        "target": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
+        "targetHandle": "{œfieldNameœ: œpredictionsœ, œidœ: œBAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610fœ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
+      },
+      {
+        "animated": false,
+        "className": "",
+        "data": {
+          "sourceHandle": {
+            "dataType": "BAUEvaluator",
+            "id": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
+            "name": "scored_tickets",
+            "output_types": [
+              "Table"
+            ]
+          },
+          "targetHandle": {
+            "fieldName": "scored_tickets",
+            "id": "BAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134",
+            "inputTypes": [
+              "DataFrame",
+              "Table"
+            ],
+            "type": "other"
+          }
+        },
+        "id": "reactflow__edge-BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f{œdataTypeœ: œBAUEvaluatorœ, œidœ: œBAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610fœ, œnameœ: œscored_ticketsœ, œoutput_typesœ: [œTableœ]}-BAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134{œfieldNameœ: œscored_ticketsœ, œidœ: œBAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}",
+        "selected": false,
+        "source": "BAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610f",
+        "sourceHandle": "{œdataTypeœ: œBAUEvaluatorœ, œidœ: œBAUEvaluator-36590c8f-dbe7-4e72-b451-f52f2663610fœ, œnameœ: œscored_ticketsœ, œoutput_typesœ: [œTableœ]}",
+        "target": "BAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134",
+        "targetHandle": "{œfieldNameœ: œscored_ticketsœ, œidœ: œBAUEvaluationDashboard-7a71fa6f-8811-4726-8072-56ebd3618134œ, œinputTypesœ: [œDataFrameœ, œTableœ], œtypeœ: œotherœ}"
       }
     ],
     "viewport": {
       "x": 0,
       "y": 0,
-      "zoom": 0.72
+      "zoom": 0.58
     }
   },
   "is_component": false,

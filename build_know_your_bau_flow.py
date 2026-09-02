@@ -80,19 +80,21 @@ def build_edge(
 
 
 def main() -> None:
-    if len(sys.argv) != 6:
+    if len(sys.argv) != 7:
         raise SystemExit(
-            "Usage: build_know_your_bau_flow.py GENERATOR SPLITTER AGENT EVALUATOR OUTPUT"
+            "Usage: build_know_your_bau_flow.py GENERATOR SPLITTER AGENT EVALUATOR DASHBOARD OUTPUT"
         )
-    generator = build_node(sys.argv[1], "SyntheticDatasetGenerator", 80)
-    splitter = build_node(sys.argv[2], "HoldoutDatasetBuilder", 480)
-    agent = build_node(sys.argv[3], "KnowYourBAUAgent", 880)
-    evaluator = build_node(sys.argv[4], "BAUEvaluator", 1280)
+    generator = build_node(sys.argv[1], "SyntheticDatasetGenerator", 80, 1100)
+    splitter = build_node(sys.argv[2], "HoldoutDatasetBuilder", 480, 1100)
+    agent = build_node(sys.argv[3], "KnowYourBAUAgent", 880, 0)
+    evaluator = build_node(sys.argv[4], "BAUEvaluator", 1280, 1100)
+    dashboard = build_node(sys.argv[5], "BAUEvaluationDashboard", 1680, 1100)
     edges = [
         build_edge(generator, "dataset", splitter, "dataset"),
         build_edge(splitter, "tickets", agent, "tickets"),
         build_edge(splitter, "ground_truth", evaluator, "ground_truth"),
         build_edge(agent, "predictions", evaluator, "predictions"),
+        build_edge(evaluator, "scored_tickets", dashboard, "scored_tickets"),
     ]
     artifact = {
         "name": "Know Your BAU - Synthetic Ticket Evaluation",
@@ -104,9 +106,9 @@ def main() -> None:
         "icon_bg_color": None,
         "gradient": None,
         "data": {
-            "nodes": [generator, splitter, agent, evaluator],
+            "nodes": [generator, splitter, agent, evaluator, dashboard],
             "edges": edges,
-            "viewport": {"x": 0, "y": 0, "zoom": 0.72},
+            "viewport": {"x": 0, "y": 0, "zoom": 0.58},
         },
         "is_component": False,
         "webhook": False,
@@ -117,7 +119,7 @@ def main() -> None:
         "access_type": "PRIVATE",
         "flow_type": "workflow",
     }
-    Path(sys.argv[5]).write_text(json.dumps(artifact, indent=2, ensure_ascii=False), encoding="utf-8")
+    Path(sys.argv[6]).write_text(json.dumps(artifact, indent=2, ensure_ascii=False), encoding="utf-8")
 
 
 if __name__ == "__main__":

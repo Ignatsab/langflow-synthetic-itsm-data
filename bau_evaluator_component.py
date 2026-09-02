@@ -23,6 +23,12 @@ class BAUEvaluator(Component):
             display_name="Fields to Score",
             value="category,ticket_type,required_skills,technology,support_level,assignment_group,agent_action",
         ),
+        StrInput(
+            name="breakdown_fields",
+            display_name="Fields Preserved for Dashboard Breakdowns",
+            value="_test_scenario,state,priority",
+            info="Comma-separated ground-truth context fields copied into scored results but not used as prediction targets.",
+        ),
     ]
 
     outputs = [
@@ -73,6 +79,7 @@ class BAUEvaluator(Component):
             for row in predicted.to_dict(orient="records")
         }
         targets = [field.strip() for field in str(self.target_fields or "").split(",") if field.strip()]
+        breakdowns = [field.strip() for field in str(self.breakdown_fields or "").split(",") if field.strip()]
         scored: list[dict[str, Any]] = []
         correct_counts = {field: 0 for field in targets}
         covered_counts = {field: 0 for field in targets}
@@ -81,6 +88,9 @@ class BAUEvaluator(Component):
             ticket_id = str(truth_row[id_field])
             prediction = predicted_by_id.get(ticket_id, {})
             row: dict[str, Any] = {id_field: truth_row[id_field], "prediction_received": bool(prediction)}
+            for field in breakdowns:
+                if field in truth_row:
+                    row[field] = truth_row.get(field)
             all_correct = bool(prediction)
             for field in targets:
                 expected_key = f"_expected_{field}"

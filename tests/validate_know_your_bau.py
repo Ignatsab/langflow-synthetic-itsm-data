@@ -19,6 +19,7 @@ def main() -> None:
     splitter = load_component(sys.argv[1])
     agent = load_component(sys.argv[2])
     evaluator = load_component(sys.argv[3])
+    dashboard = load_component(sys.argv[4])
 
     truth = pd.DataFrame(
         [
@@ -28,6 +29,7 @@ def main() -> None:
                 "description": "Remote employee loses VPN every five minutes.",
                 "category": "Network",
                 "assignment_group": "Network Support",
+                "_test_scenario": "common",
                 "_expected_category": "Network",
                 "_expected_ticket_type": "incident",
                 "_expected_required_skills": ["VPN", "network troubleshooting"],
@@ -42,6 +44,7 @@ def main() -> None:
                 "description": "User cannot sign in after failed attempts.",
                 "category": "Access",
                 "assignment_group": "Service Desk",
+                "_test_scenario": "edge",
                 "_expected_category": "Access",
                 "_expected_ticket_type": "incident",
                 "_expected_required_skills": ["identity management"],
@@ -94,11 +97,23 @@ def main() -> None:
     evaluator.predictions = predictions
     evaluator.id_field = "number"
     evaluator.target_fields = "category,ticket_type,required_skills,technology,support_level,assignment_group,agent_action"
+    evaluator.breakdown_fields = "_test_scenario,state,priority"
     scored, metrics = evaluator._evaluate()
     assert len(scored) == 2
     assert metrics["prediction_coverage"] == 1.0
     assert metrics["overall_exact_match"] == 1.0
     assert all(details["accuracy"] == 1.0 for details in metrics["fields"].values())
+    assert "_test_scenario" in scored.columns
+
+    dashboard.scored_tickets = scored
+    dashboard.scenario_field = "_test_scenario"
+    dashboard.confusion_field = "assignment_group"
+    dashboard.failure_limit = 20
+    dashboard_result = dashboard._analyze()
+    assert len(dashboard_result["field_performance"]) == 7
+    assert len(dashboard_result["scenario_performance"]) == 2
+    assert dashboard_result["overall"] == 1.0
+    assert dashboard_result["failures"].empty
     print(json.dumps(metrics, indent=2))
 
 

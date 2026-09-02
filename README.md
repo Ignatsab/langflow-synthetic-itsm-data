@@ -17,7 +17,7 @@ No extra Langflow package is required. The component uses `openai` and `pandas`,
 
 ## Know Your BAU evaluation flow
 
-Import `know_your_bau_flow.json`. It contains four connected components:
+Import `know_your_bau_flow.json`. It contains five connected components:
 
 1. **Synthetic ITSM Dataset Generator** creates fictional tickets and `_expected_*` ground-truth labels.
 2. **BAU Holdout Dataset Builder** takes only the configured sample size and removes category, assignment group, and every `_expected_*` field before the agent sees the tickets.
@@ -30,12 +30,15 @@ Import `know_your_bau_flow.json`. It contains four connected components:
    - assignment group
    - recommended agent action
 4. **Know Your BAU Evaluator** joins predictions to hidden truth by ticket number and reports prediction coverage, all-fields exact match, and per-field accuracy.
+5. **Know Your BAU Evaluation Dashboard** renders an easy-to-read Markdown scorecard and provides separate tables for field performance, scenario performance, routing confusion, and failed tickets.
 
 Both LLM-powered components start in **Dry Run** mode. Enter the same OpenAI-compatible Base URL, API key, and model name in the generator and classification agent. Test each prompt preview, then disable Dry Run on both components.
 
 The Holdout Dataset Builder defaults to 10 randomly selected tickets with a fixed seed. It removes `category`, `subcategory`, `assignment_group`, and all `_expected_*` columns, preventing ground-truth leakage. Add other answer-bearing fields to **Additional Fields to Hide** when you customize the schema.
 
 The evaluator performs normalized exact matching. Arrays such as required skills are compared without regard to order or capitalization. Free-text fields such as agent action are therefore intentionally strict; use categorical action labels in the ground truth when you need stable automated scores.
+
+The dashboard preserves `_test_scenario`, `state`, and `priority` from hidden ground truth for aggregate breakdowns; these values are never passed to the classification agent. Change **Scenario Breakdown Field** to analyze another preserved field. Change **Confusion Matrix Field** to inspect routing substitutions for `assignment_group`, `category`, `support_level`, or another scored label.
 
 ## Performance tuning
 
@@ -116,6 +119,7 @@ Only provide reference data that is approved for the target LLM environment. Aut
 - `holdout_dataset_builder_component.py`: limits the test set and hides labels
 - `know_your_bau_agent_component.py`: OpenAI-compatible BAU classification agent
 - `bau_evaluator_component.py`: deterministic ground-truth comparison and metrics
+- `bau_evaluation_dashboard_component.py`: visual scorecard, scenario breakdowns, confusion data, and failure tables
 - `build_langflow_artifact.py`: rebuilds the portable JSON inside a compatible Langflow Python environment
 - `build_know_your_bau_flow.py`: assembles the four-node flow
 - `tests/validate_know_your_bau.py`: validates masking, dry-run classification, and scoring in the Langflow runtime
