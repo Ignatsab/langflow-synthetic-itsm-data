@@ -60,6 +60,7 @@ def main() -> None:
     splitter.sample_size = 2
     splitter.id_field = "number"
     splitter.fields_to_hide = "category,assignment_group"
+    splitter.visible_fields = "number,short_description,description,priority,business_service"
     splitter.random_sample = False
     splitter.random_seed = 42
     visible, hidden_truth, hidden_fields = splitter._split()
@@ -67,6 +68,7 @@ def main() -> None:
     assert "category" not in visible.columns
     assert "assignment_group" not in visible.columns
     assert not any(column.startswith("_expected_") for column in visible.columns)
+    assert set(visible.columns).issubset({"number", "short_description", "description", "priority", "business_service"})
     assert "_expected_support_level" in hidden_truth.columns
     assert "category" in hidden_fields
 
@@ -77,6 +79,12 @@ def main() -> None:
     dry_result = asyncio.run(agent._result())
     assert dry_result["dry_run"] is True
     assert len(dry_result["predictions"]) == 2
+    aligned = agent._align_predictions(
+        visible.to_dict(orient="records"),
+        [{"category": "Network"}, {"category": "Access"}],
+        agent._fields(),
+    )
+    assert [item["number"] for item in aligned] == ["INC0000001", "INC0000002"]
 
     predictions = pd.DataFrame(
         [

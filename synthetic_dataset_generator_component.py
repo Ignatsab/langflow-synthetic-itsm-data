@@ -4,7 +4,7 @@ import re
 from typing import Any
 
 import pandas as pd
-from openai import AsyncOpenAI
+from openai import AsyncOpenAI, BadRequestError
 
 from lfx.custom import Component
 from lfx.io import BoolInput, FloatInput, IntInput, MultilineInput, Output, SecretStrInput, StrInput
@@ -321,7 +321,7 @@ class SyntheticDatasetGenerator(Component):
             kwargs["response_format"] = {"type": "json_object"}
         try:
             response = await client.chat.completions.create(**kwargs)
-        except Exception:
+        except BadRequestError:
             if "response_format" not in kwargs:
                 raise
             kwargs.pop("response_format")

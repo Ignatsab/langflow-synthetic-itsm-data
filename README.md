@@ -36,6 +36,8 @@ Both LLM-powered components start in **Dry Run** mode. Enter the same OpenAI-com
 
 The Holdout Dataset Builder defaults to 10 randomly selected tickets with a fixed seed. It removes `category`, `subcategory`, `assignment_group`, and all `_expected_*` columns, preventing ground-truth leakage. Add other answer-bearing fields to **Additional Fields to Hide** when you customize the schema. The evaluator independently receives the original generated dataset and keeps only rows whose ticket IDs occur in the agent predictions.
 
+Use **Fields Sent to BAU Agent** as a prompt-size allow-list. The default sends only the ticket number, short and full descriptions, state, impact, urgency, priority, and business service. Add another visible field only when the classifier needs it.
+
 The evaluator performs normalized exact matching. Arrays such as required skills are compared without regard to order or capitalization. Free-text fields such as agent action are therefore intentionally strict; use categorical action labels in the ground truth when you need stable automated scores.
 
 The dashboard preserves `_test_scenario`, `state`, and `priority` from hidden ground truth for aggregate breakdowns; these values are never passed to the classification agent. Change **Scenario Breakdown Field** to analyze another preserved field. Change **Confusion Matrix Field** to inspect routing substitutions for `assignment_group`, `category`, `support_level`, or another scored label.
@@ -50,6 +52,9 @@ The optimized generator defaults to 25 records per call and two concurrent calls
 - Generate only the fields needed for the test. Long descriptions and many output columns dominate generation time.
 - For quick iterations, generate 10-20 source tickets and set the holdout sample to 5. Scale up only for final evaluation.
 - The classification agent also batches tickets and supports concurrent calls independently.
+- For a slow local classifier, start with **Tickets per LLM Call = 1-3** and **Concurrent LLM Calls = 1**. The defaults are 5 and 1.
+- **Request Timeout** defaults to 600 seconds per classifier call. A timeout is not automatically repeated as a JSON-mode fallback.
+- If the model omits ticket IDs but returns the correct number of ordered predictions, the classifier safely restores IDs by batch position. Missing predictions are retried individually and produce a specific error instead of the misleading `BAU Predictions is empty` message.
 
 ## Field Definitions format
 

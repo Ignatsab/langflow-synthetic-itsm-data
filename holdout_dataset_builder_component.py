@@ -24,6 +24,12 @@ class HoldoutDatasetBuilder(Component):
             value="category,subcategory,assignment_group",
             info="Comma-separated labels that must not be visible to the BAU agent. All _expected_* fields are always hidden.",
         ),
+        StrInput(
+            name="visible_fields",
+            display_name="Fields Sent to BAU Agent",
+            value="number,short_description,description,state,impact,urgency,priority,business_service",
+            info="Comma-separated allow-list that limits prompt size. The ticket ID field is always retained.",
+        ),
         BoolInput(name="random_sample", display_name="Random Sample", value=True),
         IntInput(name="random_seed", display_name="Random Seed", value=42, advanced=True),
     ]
@@ -65,6 +71,15 @@ class HoldoutDatasetBuilder(Component):
             if str(column).startswith("_expected_") or column in configured
         )
         visible = selected.drop(columns=hidden, errors="ignore")
+        allowed = [
+            field.strip()
+            for field in str(self.visible_fields or "").split(",")
+            if field.strip()
+        ]
+        if allowed:
+            retained = [column for column in [id_field, *allowed] if column in visible.columns]
+            retained = list(dict.fromkeys(retained))
+            visible = visible[retained]
         self._split_cache = (visible, selected, hidden)
         return self._split_cache
 
