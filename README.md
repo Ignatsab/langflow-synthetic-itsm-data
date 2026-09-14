@@ -8,15 +8,15 @@
 
 1. In Langflow, open a project and choose **Upload flow** (or **Import**), then select `servicenow_synthetic_dataset_generator.json`.
 2. Open the **Synthetic ITSM Dataset Generator** component.
-3. Choose **ServiceNow** as the data source and select **Incident**, **Change Request**, or **Service Request**. Each option has a built-in schema.
+3. Leave **Schema Preset** on **Custom** to edit the table name and field definitions exactly as before, or choose **Incident**, **Change Request**, or **Service Request** to use a built-in schema.
 4. Leave **Dry Run** enabled and run once. Inspect **Generation Summary** and **Prompt Preview**.
-5. Enter the LLM proxy **Base URL**, **API Key**, and **Model Name**, or use each field's globe icon to select a global variable saved in Langflow Settings.
+5. Enter the LLM proxy **Base URL** and **API Key** if they are not configured in the server environment. The model defaults to `gpt-oss-120b` but remains editable.
 6. Disable **Dry Run**, choose the record count, and run the component. The goal, context, scenario mix, and sanitized examples remain available when customization is needed.
 7. Use **Dataset (DataFrame)** for tabular downstream processing or **Dataset (JSON)** for agent/evaluation flows.
 
 No extra Langflow package is required. The component uses `openai` and `pandas`, which are already included in the tested Langflow 1.11.5 installation.
 
-The connection inputs also fall back to server environment variables when their fields are blank: `OPENAI_BASE_URL` (or `OPENAI_API_BASE`), `OPENAI_API_KEY`, and `OPENAI_MODEL`. A blank Base URL uses the OpenAI client's standard endpoint. Langflow global variables are selected explicitly with the globe icon; the component does not read unrelated secrets from Settings automatically.
+When the connection fields are blank, the component reads `OPENAI_COMPATIBLE_BASE_URL` and `OPENAI_COMPATIBLE_API_KEY` from the Langflow server environment. It does not use Langflow's global-variable selector.
 
 ## Know Your BAU evaluation flow
 
@@ -67,7 +67,7 @@ The ServiceNow data source includes these ready-to-use schemas:
 - **Change Request** (`change_request`)
 - **Service Request** (`sc_request`)
 
-Select **Custom** as the data source to expose **Custom Table Name** and **Custom Field Definitions**.
+Keep **Schema Preset** on **Custom** to use the editable **Table Name** and **Field Definitions** inputs. Selecting a predefined type makes the generator use its built-in schema; the custom inputs remain in place for switching back at any time.
 
 ### Custom Field Definitions format
 

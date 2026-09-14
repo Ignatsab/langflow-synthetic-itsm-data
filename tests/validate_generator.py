@@ -11,22 +11,23 @@ def main() -> None:
     code = Path(sys.argv[1]).read_text(encoding="utf-8")
     template, generator = build_custom_component_template(Component(_code=code))
 
-    assert template["template"]["data_source"]["options"] == ["ServiceNow", "Custom"]
-    assert template["template"]["servicenow_table_type"]["options"] == [
+    assert template["template"]["schema_preset"]["options"] == [
+        "Custom",
         "Incident",
         "Change Request",
         "Service Request",
     ]
-    assert template["template"]["base_url"]["load_from_db"] is True
-    assert template["template"]["api_key"]["load_from_db"] is True
-    assert template["template"]["model_name"]["load_from_db"] is True
+    assert template["template"]["schema_preset"]["value"] == "Custom"
+    assert template["template"]["model_name"]["value"] == "gpt-oss-120b"
+    assert template["template"]["base_url"]["load_from_db"] is False
+    assert template["template"]["api_key"]["load_from_db"] is False
+    assert template["template"]["model_name"]["load_from_db"] is False
 
     expected = {
         "Incident": ("incident", "INC"),
         "Change Request": ("change_request", "CHG"),
         "Service Request": ("sc_request", "REQ"),
     }
-    generator.data_source = "ServiceNow"
     generator.record_count = 3
     generator.batch_size = 2
     generator.max_reference_examples = 20
@@ -36,7 +37,7 @@ def main() -> None:
     generator.compact_prompt = True
     generator.dry_run = True
     for selection, (table_name, number_prefix) in expected.items():
-        generator.servicenow_table_type = selection
+        generator.schema_preset = selection
         selected_table, schema_text = generator._table_config()
         fields = generator._parse_fields()
         assert selected_table == table_name
@@ -44,10 +45,10 @@ def main() -> None:
         assert len(fields) >= 20
         result = asyncio.run(generator._generate())
         assert result["table_name"] == table_name
-        assert result["data_source"] == "ServiceNow"
+        assert result["schema_preset"] == selection
         assert result["requested_records"] == 3
 
-    generator.data_source = "Custom"
+    generator.schema_preset = "Custom"
     generator.table_name = "products"
     generator.field_definitions = json.dumps(
         [{"name": "sku", "type": "string", "description": "Unique product identifier."}]

@@ -121,54 +121,42 @@ class SyntheticDatasetGenerator(Component):
             info="Preview and validate the prompt without using credentials or calling the model.",
         ),
         DropdownInput(
-            name="data_source",
-            display_name="Data Source",
-            options=["ServiceNow", "Custom"],
-            value="ServiceNow",
-            real_time_refresh=True,
-            info="Choose ServiceNow for a predefined schema or Custom to provide your own table and fields.",
-        ),
-        DropdownInput(
-            name="servicenow_table_type",
-            display_name="ServiceNow Table Type",
-            options=list(SERVICENOW_TABLES),
-            value="Incident",
-            info="Select a ready-to-use ServiceNow schema.",
+            name="schema_preset",
+            display_name="Schema Preset",
+            options=["Custom", *SERVICENOW_TABLES],
+            value="Custom",
+            info="Keep Custom to use the editable table name and fields below, or select a ready-to-use ServiceNow schema.",
         ),
         StrInput(
             name="base_url",
             display_name="OpenAI-Compatible Base URL",
             value="",
-            load_from_db=True,
-            info="Enter the endpoint or select a saved Langflow global variable with the globe icon. May be blank when OPENAI_BASE_URL is configured on the server.",
+            info="Enter the endpoint, or leave blank to use OPENAI_COMPATIBLE_BASE_URL from the Langflow server environment.",
         ),
         SecretStrInput(
             name="api_key",
             display_name="API Key",
             value="",
-            load_from_db=True,
-            info="Enter the key or select a saved Langflow global variable with the globe icon. Falls back to OPENAI_API_KEY when configured on the server.",
+            load_from_db=False,
+            info="Enter the key, or leave blank to use OPENAI_COMPATIBLE_API_KEY from the Langflow server environment.",
         ),
         StrInput(
             name="model_name",
             display_name="Model Name",
-            value="",
-            load_from_db=True,
-            info="Enter the model or select a saved Langflow global variable with the globe icon. May be blank when OPENAI_MODEL is configured on the server.",
+            value="gpt-oss-120b",
+            info="Model served by the OpenAI-compatible endpoint.",
         ),
         StrInput(
             name="table_name",
-            display_name="Custom Table Name",
-            value="custom_table",
-            advanced=True,
-            info="Used only when Data Source is Custom.",
+            display_name="Table Name",
+            value="incident",
+            info="Used when Schema Preset is Custom.",
         ),
         MultilineInput(
             name="field_definitions",
-            display_name="Custom Field Definitions (JSON)",
+            display_name="Field Definitions (JSON)",
             value=DEFAULT_INCIDENT_FIELDS,
-            advanced=True,
-            info="Used only when Data Source is Custom. Each object should contain name, type, description, and optionally constraints or examples.",
+            info="Used when Schema Preset is Custom. Each object should contain name, type, description, and optionally constraints or examples.",
         ),
         IntInput(name="record_count", display_name="Number of Records", value=50),
         MultilineInput(
@@ -256,19 +244,11 @@ class SyntheticDatasetGenerator(Component):
         Output(display_name="Prompt Preview", name="prompt_preview", method="build_prompt_preview"),
     ]
 
-    def update_build_config(self, build_config: dict, field_value: Any, field_name: str | None = None) -> dict:
-        if field_name == "data_source":
-            is_servicenow = field_value == "ServiceNow"
-            build_config["servicenow_table_type"]["show"] = is_servicenow
-            build_config["table_name"]["show"] = not is_servicenow
-            build_config["field_definitions"]["show"] = not is_servicenow
-        return build_config
-
     def _table_config(self) -> tuple[str, str]:
-        if str(self.data_source or "ServiceNow") == "ServiceNow":
-            selection = str(self.servicenow_table_type or "Incident")
+        selection = str(self.schema_preset or "Custom")
+        if selection != "Custom":
             if selection not in SERVICENOW_TABLES:
-                raise ValueError(f"Unsupported ServiceNow table type: {selection}")
+                raise ValueError(f"Unsupported schema preset: {selection}")
             return SERVICENOW_TABLES[selection]
         table_name = str(self.table_name or "").strip()
         if not table_name:
@@ -351,10 +331,10 @@ class SyntheticDatasetGenerator(Component):
         return str(value or "")
 
     def _system_prompt(self) -> str:
-        source = str(self.data_source or "ServiceNow")
+        is_servicenow = str(self.schema_preset or "Custom") != "Custom"
         domain_guidance = (
             "Create realistic ServiceNow records and follow ServiceNow field semantics. "
-            if source == "ServiceNow"
+            if is_servicenow
             else "Create realistic records for the domain described by the user. "
         )
         return (
@@ -387,8 +367,9 @@ class SyntheticDatasetGenerator(Component):
             else "No reference examples supplied."
         )
         fields_text = json.dumps(fields, **json_options)
+        source = "ServiceNow" if str(self.schema_preset or "Custom") != "Custom" else "custom"
         return (
-            f"Generate exactly {count} distinct synthetic records for {self.data_source} table {table_name!r}.\n\n"
+            f"Generate exactly {count} distinct synthetic records for {source} table {table_name!r}.\n\n"
             f"TEST GOAL\n{self.test_goal}\n\n"
             f"DATASET CONTEXT AND RELATIONSHIPS\n{self.dataset_context}\n\n"
             f"SCENARIO MIX\n{self.scenario_guidance}\n\n"
@@ -465,7 +446,7 @@ class SyntheticDatasetGenerator(Component):
         if self.dry_run:
             return {
                 "dry_run": True,
-                "data_source": self.data_source,
+                "schema_preset": self.schema_preset,
                 "table_name": table_name,
                 "requested_records": requested,
                 "field_count": len(fields),
@@ -473,17 +454,18 @@ class SyntheticDatasetGenerator(Component):
                 "records": [],
                 "prompt_preview": self._preview(fields, examples),
             }
-        base_url = str(self.base_url or os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE") or "").strip()
-        api_key = self._secret() or os.getenv("OPENAI_API_KEY") or ""
-        model = str(self.model_name or os.getenv("OPENAI_MODEL") or "").strip()
-        if not model:
+        base_url = str(self.base_url or os.getenv("OPENAI_COMPATIBLE_BASE_URL") or "").strip()
+        api_key = self._secret() or os.getenv("OPENAI_COMPATIBLE_API_KEY") or ""
+        model = str(self.model_name or "gpt-oss-120b").strip()
+        if not base_url:
             raise ValueError(
-                "Set Model Name, select a saved Langflow global variable, or configure OPENAI_MODEL on the Langflow server."
+                "Set OpenAI-Compatible Base URL or configure OPENAI_COMPATIBLE_BASE_URL on the Langflow server."
             )
-        client_kwargs: dict[str, Any] = {"api_key": api_key or "local"}
-        if base_url:
-            client_kwargs["base_url"] = base_url
-        client = AsyncOpenAI(**client_kwargs)
+        if not api_key:
+            raise ValueError(
+                "Set API Key or configure OPENAI_COMPATIBLE_API_KEY on the Langflow server."
+            )
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
         records: list[dict[str, Any]] = []
         fingerprints: set[str] = set()
         batch_counts = [
@@ -527,7 +509,7 @@ class SyntheticDatasetGenerator(Component):
         records = records[:requested]
         return {
             "dry_run": False,
-            "data_source": self.data_source,
+            "schema_preset": self.schema_preset,
             "table_name": table_name,
             "requested_records": requested,
             "generated_records": len(records),
