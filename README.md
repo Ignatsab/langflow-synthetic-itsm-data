@@ -76,7 +76,7 @@ The ServiceNow data source includes these ready-to-use schemas:
 - **Change Request** (`change_request`)
 - **Service Request** (`sc_request`)
 
-The normal component view shows only the safe preset workflow. Open **Advanced**, choose **Custom** from **Record Type**, and edit **Table Name** and **Field Definitions** only when a custom dataset is needed. When a predefined record type is selected, those custom values are ignored, so they cannot accidentally alter the Incident, Change Request, or Service Request schema.
+The selected table name and field JSON remain visible in the normal component view. Choose **Custom** from **Record Type** when edits to those two inputs should control generation. When a predefined record type is selected, the protected matching schema is used, so visible JSON cannot accidentally turn a Change Request run into Incident data.
 
 ### Custom Field Definitions format
 
