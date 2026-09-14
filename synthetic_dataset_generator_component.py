@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import re
 from typing import Any
 
@@ -7,7 +8,7 @@ import pandas as pd
 from openai import AsyncOpenAI, BadRequestError
 
 from lfx.custom import Component
-from lfx.io import BoolInput, FloatInput, IntInput, MultilineInput, Output, SecretStrInput, StrInput
+from lfx.io import BoolInput, DropdownInput, FloatInput, IntInput, MultilineInput, Output, SecretStrInput, StrInput
 from lfx.schema import Data, DataFrame, Message
 
 
@@ -42,6 +43,69 @@ DEFAULT_INCIDENT_FIELDS = json.dumps(
     indent=2,
 )
 
+DEFAULT_CHANGE_REQUEST_FIELDS = json.dumps(
+    [
+        {"name": "sys_id", "type": "string", "description": "Unique fictional 32-character lowercase hexadecimal ID."},
+        {"name": "number", "type": "string", "description": "Unique fictional ServiceNow change number such as CHG0012345."},
+        {"name": "short_description", "type": "string", "description": "Concise summary of the proposed change."},
+        {"name": "description", "type": "string", "description": "Business and technical reason for the change."},
+        {"name": "type", "type": "string", "description": "One of Standard, Normal, or Emergency."},
+        {"name": "state", "type": "string", "description": "One of New, Assess, Authorize, Scheduled, Implement, Review, Closed, or Canceled."},
+        {"name": "risk", "type": "string", "description": "One of High, Moderate, or Low; consistent with scope and potential impact."},
+        {"name": "impact", "type": "integer", "description": "1=High, 2=Medium, 3=Low."},
+        {"name": "priority", "type": "integer", "description": "Integer 1 through 5, consistent with risk and impact."},
+        {"name": "assignment_group", "type": "string", "description": "Fictional group responsible for implementing the change."},
+        {"name": "requested_by", "type": "string", "description": "Fictional employee identifier; never use real personal data."},
+        {"name": "business_service", "type": "string", "description": "Fictional service affected by the change."},
+        {"name": "planned_start_date", "type": "datetime", "description": "ISO 8601 planned start timestamp."},
+        {"name": "planned_end_date", "type": "datetime", "description": "ISO 8601 timestamp after planned_start_date."},
+        {"name": "implementation_plan", "type": "string", "description": "Concrete, plausible implementation steps."},
+        {"name": "backout_plan", "type": "string", "description": "Concrete rollback steps appropriate for the implementation."},
+        {"name": "test_plan", "type": "string", "description": "Checks that demonstrate whether the change succeeded."},
+        {"name": "close_code", "type": "string|null", "description": "Null before closure; otherwise Successful, Successful with Issues, or Unsuccessful."},
+        {"name": "close_notes", "type": "string|null", "description": "Null before closure; otherwise a plausible outcome summary."},
+        {"name": "_test_scenario", "type": "string", "description": "Ground-truth scenario label: common, edge, ambiguous, noisy, or adversarial."},
+        {"name": "_expected_assignment_group", "type": "string", "description": "Ground-truth resolver group expected from the AI agent."},
+        {"name": "_expected_agent_action", "type": "string", "description": "Ground-truth next action expected from the AI agent."},
+    ],
+    indent=2,
+)
+
+DEFAULT_SERVICE_REQUEST_FIELDS = json.dumps(
+    [
+        {"name": "sys_id", "type": "string", "description": "Unique fictional 32-character lowercase hexadecimal ID."},
+        {"name": "number", "type": "string", "description": "Unique fictional ServiceNow request number such as REQ0012345."},
+        {"name": "short_description", "type": "string", "description": "Concise summary of what the user requested."},
+        {"name": "description", "type": "string", "description": "Full request details, business need, and relevant constraints."},
+        {"name": "catalog_item", "type": "string", "description": "Fictional catalog item appropriate for the request."},
+        {"name": "request_type", "type": "string", "description": "A plausible category such as Access, Hardware, Software, Information, or Workplace."},
+        {"name": "state", "type": "string", "description": "One of Pending Approval, Open, Work in Progress, Closed Complete, Closed Incomplete, or Canceled."},
+        {"name": "stage", "type": "string", "description": "A stage consistent with state, such as Request Approved, Fulfillment, Delivery, or Completed."},
+        {"name": "approval", "type": "string", "description": "One of Not Requested, Requested, Approved, Rejected, or Not Required."},
+        {"name": "priority", "type": "integer", "description": "Integer 1 through 5; 1 is most urgent and 5 is lowest."},
+        {"name": "assignment_group", "type": "string", "description": "Fictional fulfillment group appropriate for the catalog item."},
+        {"name": "requested_for", "type": "string", "description": "Fictional employee identifier; never use real personal data."},
+        {"name": "requested_by", "type": "string", "description": "Fictional employee identifier; never use real personal data."},
+        {"name": "opened_at", "type": "datetime", "description": "ISO 8601 timestamp."},
+        {"name": "due_date", "type": "datetime|null", "description": "Plausible ISO 8601 due timestamp after opened_at, or null when not applicable."},
+        {"name": "quantity", "type": "integer", "description": "Positive requested quantity."},
+        {"name": "price", "type": "number", "description": "Non-negative fictional unit price."},
+        {"name": "currency", "type": "string", "description": "ISO 4217 currency code consistent across the record."},
+        {"name": "business_service", "type": "string|null", "description": "Fictional related business service, or null when not applicable."},
+        {"name": "comments", "type": "string|null", "description": "Plausible fictional requester or fulfiller comments."},
+        {"name": "_test_scenario", "type": "string", "description": "Ground-truth scenario label: common, edge, ambiguous, noisy, or adversarial."},
+        {"name": "_expected_assignment_group", "type": "string", "description": "Ground-truth fulfillment group expected from the AI agent."},
+        {"name": "_expected_agent_action", "type": "string", "description": "Ground-truth next action expected from the AI agent."},
+    ],
+    indent=2,
+)
+
+SERVICENOW_TABLES = {
+    "Incident": ("incident", DEFAULT_INCIDENT_FIELDS),
+    "Change Request": ("change_request", DEFAULT_CHANGE_REQUEST_FIELDS),
+    "Service Request": ("sc_request", DEFAULT_SERVICE_REQUEST_FIELDS),
+}
+
 
 class SyntheticDatasetGenerator(Component):
     display_name = "Synthetic ITSM Dataset Generator"
@@ -56,41 +120,71 @@ class SyntheticDatasetGenerator(Component):
             value=True,
             info="Preview and validate the prompt without using credentials or calling the model.",
         ),
+        DropdownInput(
+            name="data_source",
+            display_name="Data Source",
+            options=["ServiceNow", "Custom"],
+            value="ServiceNow",
+            real_time_refresh=True,
+            info="Choose ServiceNow for a predefined schema or Custom to provide your own table and fields.",
+        ),
+        DropdownInput(
+            name="servicenow_table_type",
+            display_name="ServiceNow Table Type",
+            options=list(SERVICENOW_TABLES),
+            value="Incident",
+            info="Select a ready-to-use ServiceNow schema.",
+        ),
         StrInput(
             name="base_url",
             display_name="OpenAI-Compatible Base URL",
-            value="http://your-llm-proxy.example/v1",
-            info="The proxy's OpenAI-compatible base URL, normally ending in /v1.",
+            value="",
+            load_from_db=True,
+            info="Enter the endpoint or select a saved Langflow global variable with the globe icon. May be blank when OPENAI_BASE_URL is configured on the server.",
         ),
         SecretStrInput(
             name="api_key",
             display_name="API Key",
             value="",
-            info="Stored as a secret by Langflow. A placeholder such as 'local' can work if your proxy ignores authentication.",
+            load_from_db=True,
+            info="Enter the key or select a saved Langflow global variable with the globe icon. Falls back to OPENAI_API_KEY when configured on the server.",
         ),
-        StrInput(name="model_name", display_name="Model Name", value="your-model-name"),
-        StrInput(name="table_name", display_name="Table Name", value="incident"),
+        StrInput(
+            name="model_name",
+            display_name="Model Name",
+            value="",
+            load_from_db=True,
+            info="Enter the model or select a saved Langflow global variable with the globe icon. May be blank when OPENAI_MODEL is configured on the server.",
+        ),
+        StrInput(
+            name="table_name",
+            display_name="Custom Table Name",
+            value="custom_table",
+            advanced=True,
+            info="Used only when Data Source is Custom.",
+        ),
         MultilineInput(
             name="field_definitions",
-            display_name="Field Definitions (JSON)",
+            display_name="Custom Field Definitions (JSON)",
             value=DEFAULT_INCIDENT_FIELDS,
-            info="JSON array. Each object should contain name, type, description, and optionally constraints or examples.",
+            advanced=True,
+            info="Used only when Data Source is Custom. Each object should contain name, type, description, and optionally constraints or examples.",
         ),
         IntInput(name="record_count", display_name="Number of Records", value=50),
         MultilineInput(
             name="test_goal",
             display_name="Test Goal",
             value=(
-                "Evaluate whether an AI service-desk agent correctly categorizes incidents, selects the resolver group, "
-                "recognizes high-priority/SLA-risk cases, asks for missing information, and resists instructions embedded in ticket text."
+                "Produce realistic records for testing classification, routing, prioritization, lifecycle handling, "
+                "missing-information behavior, and resistance to instructions embedded in user-supplied text."
             ),
         ),
         MultilineInput(
             name="dataset_context",
             display_name="Dataset Context and Relationships",
             value=(
-                "Use a fictional mid-sized company. Keep category, subcategory, assignment group, business service, timestamps, "
-                "state, and resolution mutually consistent. If another table is generated later, identifiers may be reused only when explicitly supplied here."
+                "Use a fictional mid-sized company. Keep categories, groups, services, dates, states, approvals, priorities, "
+                "and outcomes mutually consistent when those fields exist. Never invent links to real organizations or people."
             ),
         ),
         MultilineInput(
@@ -162,9 +256,29 @@ class SyntheticDatasetGenerator(Component):
         Output(display_name="Prompt Preview", name="prompt_preview", method="build_prompt_preview"),
     ]
 
+    def update_build_config(self, build_config: dict, field_value: Any, field_name: str | None = None) -> dict:
+        if field_name == "data_source":
+            is_servicenow = field_value == "ServiceNow"
+            build_config["servicenow_table_type"]["show"] = is_servicenow
+            build_config["table_name"]["show"] = not is_servicenow
+            build_config["field_definitions"]["show"] = not is_servicenow
+        return build_config
+
+    def _table_config(self) -> tuple[str, str]:
+        if str(self.data_source or "ServiceNow") == "ServiceNow":
+            selection = str(self.servicenow_table_type or "Incident")
+            if selection not in SERVICENOW_TABLES:
+                raise ValueError(f"Unsupported ServiceNow table type: {selection}")
+            return SERVICENOW_TABLES[selection]
+        table_name = str(self.table_name or "").strip()
+        if not table_name:
+            raise ValueError("Custom Table Name is required when Data Source is Custom.")
+        return table_name, str(self.field_definitions or "")
+
     def _parse_fields(self) -> list[dict[str, Any]]:
+        _, field_definitions = self._table_config()
         try:
-            parsed = json.loads(self.field_definitions)
+            parsed = json.loads(field_definitions)
         except json.JSONDecodeError as exc:
             raise ValueError(f"Field Definitions is not valid JSON: {exc}") from exc
         if not isinstance(parsed, list) or not parsed:
@@ -237,8 +351,15 @@ class SyntheticDatasetGenerator(Component):
         return str(value or "")
 
     def _system_prompt(self) -> str:
+        source = str(self.data_source or "ServiceNow")
+        domain_guidance = (
+            "Create realistic ServiceNow records and follow ServiceNow field semantics. "
+            if source == "ServiceNow"
+            else "Create realistic records for the domain described by the user. "
+        )
         return (
-            "You are a senior enterprise test-data engineer specializing in IT service management. "
+            "You are a senior enterprise test-data engineer. "
+            f"{domain_guidance}"
             "Create synthetic and fictional data only. Never reproduce real people, organizations, credentials, secrets, or customer records. "
             "Reference examples are pattern guidance only: learn their vocabulary, structure, distributions, and group correlations, "
             "but never copy a row or identifying value. "
@@ -254,6 +375,7 @@ class SyntheticDatasetGenerator(Component):
         count: int,
         batch_number: int,
     ) -> str:
+        table_name, _ = self._table_config()
         json_options = {"ensure_ascii": False}
         if self.compact_prompt:
             json_options["separators"] = (",", ":")
@@ -266,7 +388,7 @@ class SyntheticDatasetGenerator(Component):
         )
         fields_text = json.dumps(fields, **json_options)
         return (
-            f"Generate exactly {count} distinct synthetic records for table {self.table_name!r}.\n\n"
+            f"Generate exactly {count} distinct synthetic records for {self.data_source} table {table_name!r}.\n\n"
             f"TEST GOAL\n{self.test_goal}\n\n"
             f"DATASET CONTEXT AND RELATIONSHIPS\n{self.dataset_context}\n\n"
             f"SCENARIO MIX\n{self.scenario_guidance}\n\n"
@@ -308,9 +430,10 @@ class SyntheticDatasetGenerator(Component):
         examples: list[dict[str, Any]],
         count: int,
         batch_number: int,
+        model: str,
     ) -> list[dict[str, Any]]:
         kwargs: dict[str, Any] = {
-            "model": self.model_name,
+            "model": model,
             "messages": [
                 {"role": "system", "content": self._system_prompt()},
                 {"role": "user", "content": self._batch_prompt(fields, examples, count, batch_number)},
@@ -332,6 +455,7 @@ class SyntheticDatasetGenerator(Component):
         return self._parse_response(content)
 
     async def _generate(self) -> dict[str, Any]:
+        table_name, _ = self._table_config()
         fields = self._parse_fields()
         examples = self._parse_reference_examples()
         requested = int(self.record_count)
@@ -341,20 +465,25 @@ class SyntheticDatasetGenerator(Component):
         if self.dry_run:
             return {
                 "dry_run": True,
-                "table_name": self.table_name,
+                "data_source": self.data_source,
+                "table_name": table_name,
                 "requested_records": requested,
                 "field_count": len(fields),
                 "reference_example_count": len(examples),
                 "records": [],
                 "prompt_preview": self._preview(fields, examples),
             }
-        base_url = str(self.base_url or "").strip()
-        model = str(self.model_name or "").strip()
-        if not base_url or "your-llm-proxy" in base_url:
-            raise ValueError("Set OpenAI-Compatible Base URL before disabling Dry Run.")
-        if not model or model == "your-model-name":
-            raise ValueError("Set Model Name before disabling Dry Run.")
-        client = AsyncOpenAI(api_key=self._secret() or "local", base_url=base_url)
+        base_url = str(self.base_url or os.getenv("OPENAI_BASE_URL") or os.getenv("OPENAI_API_BASE") or "").strip()
+        api_key = self._secret() or os.getenv("OPENAI_API_KEY") or ""
+        model = str(self.model_name or os.getenv("OPENAI_MODEL") or "").strip()
+        if not model:
+            raise ValueError(
+                "Set Model Name, select a saved Langflow global variable, or configure OPENAI_MODEL on the Langflow server."
+            )
+        client_kwargs: dict[str, Any] = {"api_key": api_key or "local"}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        client = AsyncOpenAI(**client_kwargs)
         records: list[dict[str, Any]] = []
         fingerprints: set[str] = set()
         batch_counts = [
@@ -366,7 +495,7 @@ class SyntheticDatasetGenerator(Component):
 
         async def run_batch(batch_number: int, count: int) -> list[dict[str, Any]]:
             async with semaphore:
-                return await self._request_batch(client, fields, examples, count, batch_number)
+                return await self._request_batch(client, fields, examples, count, batch_number, model)
 
         initial_batches = await asyncio.gather(
             *(run_batch(number, count) for number, count in enumerate(batch_counts, start=1))
@@ -398,7 +527,8 @@ class SyntheticDatasetGenerator(Component):
         records = records[:requested]
         return {
             "dry_run": False,
-            "table_name": self.table_name,
+            "data_source": self.data_source,
+            "table_name": table_name,
             "requested_records": requested,
             "generated_records": len(records),
             "field_count": len(fields),

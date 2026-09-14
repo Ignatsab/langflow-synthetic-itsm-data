@@ -8,12 +8,15 @@
 
 1. In Langflow, open a project and choose **Upload flow** (or **Import**), then select `servicenow_synthetic_dataset_generator.json`.
 2. Open the **Synthetic ITSM Dataset Generator** component.
-3. Leave **Dry Run** enabled and run once. Inspect **Generation Summary** and **Prompt Preview**.
-4. Enter the LLM proxy **Base URL**, **API Key**, and **Model Name**.
-5. Disable **Dry Run**, set the table, fields, record count, test goal, context, and scenario mix, then run the component.
-6. Use **Dataset (DataFrame)** for tabular downstream processing or **Dataset (JSON)** for agent/evaluation flows.
+3. Choose **ServiceNow** as the data source and select **Incident**, **Change Request**, or **Service Request**. Each option has a built-in schema.
+4. Leave **Dry Run** enabled and run once. Inspect **Generation Summary** and **Prompt Preview**.
+5. Enter the LLM proxy **Base URL**, **API Key**, and **Model Name**, or use each field's globe icon to select a global variable saved in Langflow Settings.
+6. Disable **Dry Run**, choose the record count, and run the component. The goal, context, scenario mix, and sanitized examples remain available when customization is needed.
+7. Use **Dataset (DataFrame)** for tabular downstream processing or **Dataset (JSON)** for agent/evaluation flows.
 
 No extra Langflow package is required. The component uses `openai` and `pandas`, which are already included in the tested Langflow 1.11.5 installation.
+
+The connection inputs also fall back to server environment variables when their fields are blank: `OPENAI_BASE_URL` (or `OPENAI_API_BASE`), `OPENAI_API_KEY`, and `OPENAI_MODEL`. A blank Base URL uses the OpenAI client's standard endpoint. Langflow global variables are selected explicitly with the globe icon; the component does not read unrelated secrets from Settings automatically.
 
 ## Know Your BAU evaluation flow
 
@@ -56,7 +59,17 @@ The optimized generator defaults to 25 records per call and two concurrent calls
 - **Request Timeout** defaults to 600 seconds per classifier call. A timeout is not automatically repeated as a JSON-mode fallback.
 - If the model omits ticket IDs but returns the correct number of ordered predictions, the classifier safely restores IDs by batch position. Missing predictions are retried individually and produce a specific error instead of the misleading `BAU Predictions is empty` message.
 
-## Field Definitions format
+## Built-in and custom schemas
+
+The ServiceNow data source includes these ready-to-use schemas:
+
+- **Incident** (`incident`)
+- **Change Request** (`change_request`)
+- **Service Request** (`sc_request`)
+
+Select **Custom** as the data source to expose **Custom Table Name** and **Custom Field Definitions**.
+
+### Custom Field Definitions format
 
 Field Definitions must be a JSON array:
 
@@ -75,7 +88,7 @@ Field Definitions must be a JSON array:
 ]
 ```
 
-The imported flow contains a complete Incident example. Edit that JSON for `change_request`, `sc_request`, `sc_req_item`, or any non-ServiceNow table. Add fields beginning with `_expected_` to store ground truth used to score the final AI agent.
+Add fields beginning with `_expected_` to store ground truth used to score a downstream AI agent.
 
 ## Use examples from real data
 

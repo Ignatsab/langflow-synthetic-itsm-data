@@ -34,7 +34,7 @@ def main() -> None:
     }
     artifact = {
         "name": "Synthetic ITSM Dataset Generator",
-        "description": "Portable schema-driven synthetic dataset generator for ServiceNow-style AI agent testing.",
+        "description": "Synthetic dataset generator with built-in ServiceNow Incident, Change Request, and Service Request schemas.",
         "icon": None,
         "icon_bg_color": None,
         "gradient": None,
