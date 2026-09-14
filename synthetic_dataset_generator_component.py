@@ -106,6 +106,51 @@ SERVICENOW_TABLES = {
     "Service Request": ("sc_request", DEFAULT_SERVICE_REQUEST_FIELDS),
 }
 
+SERVICENOW_GOALS = {
+    "Incident": (
+        "Evaluate whether an AI service-desk agent correctly categorizes incidents, assigns the right resolver group, "
+        "recognizes priority and SLA risk, asks for missing information, and recommends the correct next action."
+    ),
+    "Change Request": (
+        "Evaluate whether an AI change-management agent correctly assesses type, risk, impact, scheduling, approvals, "
+        "implementation readiness, rollback quality, assignment group, and the correct next action."
+    ),
+    "Service Request": (
+        "Evaluate whether an AI fulfillment agent correctly identifies the catalog need, approval path, priority, "
+        "fulfillment group, missing information, delivery stage, and the correct next action."
+    ),
+}
+
+SERVICENOW_CONTEXTS = {
+    "Incident": (
+        "Use one fictional mid-sized company with a stable service catalog and resolver-group taxonomy. Keep category, "
+        "subcategory, assignment group, business service, priority, timestamps, state, and resolution mutually consistent."
+    ),
+    "Change Request": (
+        "Use one fictional mid-sized company with recurring services and implementation teams. Keep change type, risk, "
+        "impact, priority, assignment group, schedule, plans, state, close code, and close notes mutually consistent."
+    ),
+    "Service Request": (
+        "Use one fictional mid-sized company with a stable catalog and fulfillment groups. Keep catalog item, request type, "
+        "approval, priority, assignment group, dates, price, currency, stage, and state mutually consistent."
+    ),
+}
+
+SERVICENOW_SCENARIOS = {
+    "Incident": (
+        "Approximately 60% common incidents, 20% edge cases, 10% ambiguous or incomplete/noisy cases, and 10% adversarial cases. "
+        "Include varied writing styles, typos, duplicates, escalations, missing optional data, outages, and SLA risks."
+    ),
+    "Change Request": (
+        "Approximately 55% normal changes, 20% standard changes, 10% emergency changes, 10% risky or incomplete plans, and 5% adversarial text. "
+        "Include scheduling conflicts, weak rollback plans, approval gaps, failed changes, and successful reviews."
+    ),
+    "Service Request": (
+        "Approximately 60% common requests, 20% unusual catalog combinations, 10% incomplete or ambiguous requests, and 10% rejected, canceled, or adversarial cases. "
+        "Include access, hardware, software, information, approval, delivery, and fulfillment variations."
+    ),
+}
+
 
 class SyntheticDatasetGenerator(Component):
     display_name = "Synthetic ITSM Dataset Generator"
@@ -125,6 +170,7 @@ class SyntheticDatasetGenerator(Component):
             display_name="Record Type",
             options=[*SERVICENOW_TABLES, "Custom"],
             value="Incident",
+            real_time_refresh=True,
             info="Select Incident, Change Request, or Service Request for a validated built-in schema. Custom is available under Advanced.",
         ),
         StrInput(
@@ -150,50 +196,34 @@ class SyntheticDatasetGenerator(Component):
             name="table_name",
             display_name="Table Name",
             value="incident",
-            advanced=True,
-            info="Used when Schema Preset is Custom.",
+            info="Shows the selected ServiceNow table name. It is editable when Record Type is Custom.",
         ),
         MultilineInput(
             name="field_definitions",
             display_name="Field Definitions (JSON)",
             value=DEFAULT_INCIDENT_FIELDS,
-            advanced=True,
-            info="Used when Schema Preset is Custom. Each object should contain name, type, description, and optionally constraints or examples.",
+            info="Shows the selected schema with field descriptions. Built-in presets use their protected schema; select Custom to edit it.",
         ),
         IntInput(name="record_count", display_name="Number of Records", value=50),
         MultilineInput(
             name="test_goal",
             display_name="Test Goal",
-            value=(
-                "Produce realistic records for testing classification, routing, prioritization, lifecycle handling, "
-                "missing-information behavior, and resistance to instructions embedded in user-supplied text."
-            ),
-            advanced=True,
+            value=SERVICENOW_GOALS["Incident"],
         ),
         MultilineInput(
             name="dataset_context",
             display_name="Dataset Context and Relationships",
-            value=(
-                "Use a fictional mid-sized company. Keep categories, groups, services, dates, states, approvals, priorities, "
-                "and outcomes mutually consistent when those fields exist. Never invent links to real organizations or people."
-            ),
-            advanced=True,
+            value=SERVICENOW_CONTEXTS["Incident"],
         ),
         MultilineInput(
             name="scenario_guidance",
             display_name="Scenario Mix",
-            value=(
-                "Approximately 60% common cases, 20% edge cases, 10% ambiguous or incomplete/noisy cases, and 10% adversarial cases. "
-                "Include varied writing styles, typos, terse reports, long reports, duplicates, escalations, missing optional data, and SLA risks. "
-                "Adversarial text may contain prompt-injection attempts, but must remain safe and fictional."
-            ),
-            advanced=True,
+            value=SERVICENOW_SCENARIOS["Incident"],
         ),
         MultilineInput(
             name="reference_examples",
             display_name="Sanitized Reference Examples (JSON)",
             value="[]",
-            advanced=True,
             info=(
                 "Optional examples used to learn structure, vocabulary, and group patterns. Paste a JSON array of records "
                 "or an object whose keys are group names. Use only data approved for your LLM environment."
@@ -220,13 +250,31 @@ class SyntheticDatasetGenerator(Component):
             advanced=True,
             info="Caps prompt size. Select a representative mix across the groups you want to test.",
         ),
-        IntInput(name="batch_size", display_name="Records per LLM Call", value=25, advanced=True),
+        IntInput(
+            name="batch_size",
+            display_name="Records per Generation Call",
+            value=10,
+            info="The component loops until Number of Records is reached. Keep this at 10 for models with a smaller context window.",
+        ),
+        BoolInput(
+            name="maintain_continuity",
+            display_name="Keep Dataset Connected Across Calls",
+            value=True,
+            info="Runs batches sequentially and sends a compact profile of earlier records to each next call.",
+        ),
+        IntInput(
+            name="continuity_sample_size",
+            display_name="Recent Records in Continuity Profile",
+            value=3,
+            advanced=True,
+            info="Number of compact recent records included alongside distribution summaries. Capped at 10.",
+        ),
         IntInput(
             name="max_concurrency",
             display_name="Concurrent LLM Calls",
             value=2,
             advanced=True,
-            info="Use 1 for a single-threaded local server. Use 2-4 only when the proxy can process concurrent requests.",
+            info="Used only when connected-dataset continuity is disabled. Use 1 for a single-threaded local server.",
         ),
         BoolInput(
             name="compact_prompt",
@@ -250,7 +298,18 @@ class SyntheticDatasetGenerator(Component):
         Output(display_name="Dataset (JSON)", name="dataset_json", method="build_json"),
         Output(display_name="Generation Summary", name="summary", method="build_summary"),
         Output(display_name="Prompt Preview", name="prompt_preview", method="build_prompt_preview"),
+        Output(display_name="Continuity Profile", name="continuity_profile", method="build_continuity_profile"),
     ]
+
+    def update_build_config(self, build_config: dict, field_value: Any, field_name: str | None = None) -> dict:
+        if field_name == "schema_preset" and field_value in SERVICENOW_TABLES:
+            table_name, schema = SERVICENOW_TABLES[field_value]
+            build_config["table_name"]["value"] = table_name
+            build_config["field_definitions"]["value"] = schema
+            build_config["test_goal"]["value"] = SERVICENOW_GOALS[field_value]
+            build_config["dataset_context"]["value"] = SERVICENOW_CONTEXTS[field_value]
+            build_config["scenario_guidance"]["value"] = SERVICENOW_SCENARIOS[field_value]
+        return build_config
 
     def _table_config(self) -> tuple[str, str]:
         selection = str(self.schema_preset or "Custom")
@@ -356,12 +415,81 @@ class SyntheticDatasetGenerator(Component):
             "Keep related values internally consistent. Ground-truth fields beginning with an underscore describe the expected behavior of the system under test."
         )
 
+    def _continuity_profile(self, records: list[dict[str, Any]]) -> dict[str, Any]:
+        if not records:
+            return {}
+        distribution_fields = (
+            "category",
+            "subcategory",
+            "state",
+            "priority",
+            "assignment_group",
+            "business_service",
+            "type",
+            "risk",
+            "request_type",
+            "catalog_item",
+            "approval",
+            "stage",
+            "_test_scenario",
+        )
+        distributions: dict[str, dict[str, int]] = {}
+        for field in distribution_fields:
+            counts: dict[str, int] = {}
+            for record in records:
+                value = record.get(field)
+                if value is None or isinstance(value, (dict, list)):
+                    continue
+                label = str(value)[:100]
+                counts[label] = counts.get(label, 0) + 1
+            if counts:
+                distributions[field] = dict(
+                    sorted(counts.items(), key=lambda item: (-item[1], item[0]))[:12]
+                )
+
+        recent_fields = (
+            "number",
+            "category",
+            "subcategory",
+            "state",
+            "priority",
+            "assignment_group",
+            "business_service",
+            "type",
+            "risk",
+            "request_type",
+            "catalog_item",
+            "approval",
+            "stage",
+            "opened_at",
+            "planned_start_date",
+            "_test_scenario",
+        )
+        sample_size = min(max(int(self.continuity_sample_size), 0), 10)
+        recent_records = [
+            {
+                field: (str(record[field])[:160] if isinstance(record[field], str) else record[field])
+                for field in recent_fields
+                if field in record
+            }
+            for record in records[-sample_size:]
+        ]
+        numbers = [str(record["number"]) for record in records if record.get("number")]
+        return {
+            "generated_so_far": len(records),
+            "first_record_number": numbers[0] if numbers else None,
+            "latest_record_number": numbers[-1] if numbers else None,
+            "distributions": distributions,
+            "recent_records": recent_records,
+        }
+
     def _batch_prompt(
         self,
         fields: list[dict[str, Any]],
         examples: list[dict[str, Any]],
         count: int,
         batch_number: int,
+        continuity_profile: dict[str, Any] | None = None,
     ) -> str:
         table_name, _ = self._table_config()
         json_options = {"ensure_ascii": False}
@@ -375,6 +503,11 @@ class SyntheticDatasetGenerator(Component):
             else "No reference examples supplied."
         )
         fields_text = json.dumps(fields, **json_options)
+        continuity_text = (
+            json.dumps(continuity_profile, **json_options)
+            if continuity_profile
+            else "This is the first batch; no earlier records exist."
+        )
         source = "ServiceNow" if str(self.schema_preset or "Custom") != "Custom" else "custom"
         return (
             f"Generate exactly {count} distinct synthetic records for {source} table {table_name!r}.\n\n"
@@ -384,7 +517,10 @@ class SyntheticDatasetGenerator(Component):
             f"FIELD DEFINITIONS\n{fields_text}\n\n"
             f"SANITIZED REFERENCE EXAMPLES\n{examples_text}\n\n"
             f"REFERENCE GROUP FIELD\n{self.example_group_field}\n\n"
+            f"EARLIER DATASET CONTINUITY PROFILE\n{continuity_text}\n\n"
             "Match realistic patterns and group-specific distinctions shown by the references while creating wholly new cases. "
+            "Continue the same fictional organization, recurring services, group taxonomy, chronology, and identifier sequence reflected in the continuity profile. "
+            "Preserve its broad distributions without mechanically repeating earlier values. "
             "Do not repeat reference identifiers, wording, timestamps, or complete records. Cover the represented groups meaningfully. "
             f"This is generation batch {batch_number}. Use diverse values and avoid template-like repetition. "
             "Do not include explanations or Markdown. Return compact JSON as {\"records\":[...]} only."
@@ -420,12 +556,16 @@ class SyntheticDatasetGenerator(Component):
         count: int,
         batch_number: int,
         model: str,
+        continuity_profile: dict[str, Any] | None = None,
     ) -> list[dict[str, Any]]:
         kwargs: dict[str, Any] = {
             "model": model,
             "messages": [
                 {"role": "system", "content": self._system_prompt()},
-                {"role": "user", "content": self._batch_prompt(fields, examples, count, batch_number)},
+                {
+                    "role": "user",
+                    "content": self._batch_prompt(fields, examples, count, batch_number, continuity_profile),
+                },
             ],
             "temperature": float(self.temperature),
         }
@@ -459,6 +599,9 @@ class SyntheticDatasetGenerator(Component):
                 "requested_records": requested,
                 "field_count": len(fields),
                 "reference_example_count": len(examples),
+                "batch_size": batch_size,
+                "maintain_continuity": bool(self.maintain_continuity),
+                "continuity_profile": {},
                 "records": [],
                 "prompt_preview": self._preview(fields, examples),
             }
@@ -483,13 +626,21 @@ class SyntheticDatasetGenerator(Component):
         concurrency = min(max(int(self.max_concurrency), 1), 8)
         semaphore = asyncio.Semaphore(concurrency)
 
-        async def run_batch(batch_number: int, count: int) -> list[dict[str, Any]]:
+        async def run_batch(
+            batch_number: int,
+            count: int,
+            continuity_profile: dict[str, Any] | None = None,
+        ) -> list[dict[str, Any]]:
             async with semaphore:
-                return await self._request_batch(client, fields, examples, count, batch_number, model)
-
-        initial_batches = await asyncio.gather(
-            *(run_batch(number, count) for number, count in enumerate(batch_counts, start=1))
-        )
+                return await self._request_batch(
+                    client,
+                    fields,
+                    examples,
+                    count,
+                    batch_number,
+                    model,
+                    continuity_profile,
+                )
 
         def add_records(incoming: list[dict[str, Any]]) -> None:
             for record in incoming:
@@ -500,17 +651,28 @@ class SyntheticDatasetGenerator(Component):
                     if len(records) >= requested:
                         break
 
-        for incoming in initial_batches:
-            add_records(incoming)
-            if len(records) >= requested:
-                break
+        if self.maintain_continuity:
+            for batch_number, count in enumerate(batch_counts, start=1):
+                profile = self._continuity_profile(records)
+                add_records(await run_batch(batch_number, count, profile))
+                if len(records) >= requested:
+                    break
+        else:
+            initial_batches = await asyncio.gather(
+                *(run_batch(number, count) for number, count in enumerate(batch_counts, start=1))
+            )
+            for incoming in initial_batches:
+                add_records(incoming)
+                if len(records) >= requested:
+                    break
 
         retry_number = len(batch_counts) + 1
         for _ in range(3):
             remaining = requested - len(records)
             if remaining <= 0:
                 break
-            add_records(await run_batch(retry_number, min(remaining, batch_size)))
+            profile = self._continuity_profile(records) if self.maintain_continuity else None
+            add_records(await run_batch(retry_number, min(remaining, batch_size), profile))
             retry_number += 1
         if len(records) < requested:
             raise ValueError(f"The model produced only {len(records)} unique valid records after retries; requested {requested}.")
@@ -523,6 +685,10 @@ class SyntheticDatasetGenerator(Component):
             "generated_records": len(records),
             "field_count": len(fields),
             "reference_example_count": len(examples),
+            "batch_size": batch_size,
+            "generation_calls": retry_number - 1,
+            "maintain_continuity": bool(self.maintain_continuity),
+            "continuity_profile": self._continuity_profile(records),
             "records": records,
             "prompt_preview": self._preview(fields, examples),
         }
@@ -561,12 +727,18 @@ class SyntheticDatasetGenerator(Component):
                 "Enter the proxy settings, switch Dry Run off, and run again to generate data."
             )
         else:
+            continuity = " with continuity enabled" if result["maintain_continuity"] else ""
             text = (
                 f"Generated {result['generated_records']} synthetic records for table '{result['table_name']}' "
-                f"with {result['field_count']} configured fields using {result['reference_example_count']} sanitized reference examples."
+                f"in batches of up to {result['batch_size']}{continuity}. "
+                f"The dataset has {result['field_count']} fields and used {result['reference_example_count']} sanitized reference examples."
             )
         return Message(text=text)
 
     async def build_prompt_preview(self) -> Message:
         result = await self._result()
         return Message(text=result["prompt_preview"])
+
+    async def build_continuity_profile(self) -> Data:
+        result = await self._result()
+        return Data(data=result["continuity_profile"])

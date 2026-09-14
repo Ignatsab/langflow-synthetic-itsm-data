@@ -11,8 +11,10 @@
 3. Choose **Incident**, **Change Request**, or **Service Request** from **Record Type**. Incident is selected by default, and each option uses its own internal schema.
 4. Leave **Dry Run** enabled and run once. Inspect **Generation Summary** and **Prompt Preview**.
 5. Enter the LLM proxy **Base URL** and **API Key** if they are not configured in the server environment. The model defaults to `gpt-oss-120b` but remains editable.
-6. Disable **Dry Run**, choose the record count, and run the component. The goal, context, scenario mix, and sanitized examples remain available when customization is needed.
+6. Disable **Dry Run**, choose the total record count, and keep **Records per Generation Call** at `10` for a smaller-context model. The component loops until it reaches the total.
 7. Use **Dataset (DataFrame)** for tabular downstream processing or **Dataset (JSON)** for agent/evaluation flows.
+
+The predefined field JSON, descriptions, test goal, dataset context, scenario mix, and reference examples remain visible. Changing **Record Type** refreshes the displayed table name and field JSON. Built-in generation uses the protected matching schema; choose **Custom** when you want edits to the table name or fields to take effect.
 
 No extra Langflow package is required. The component uses `openai` and `pandas`, which are already included in the tested Langflow 1.11.5 installation.
 
@@ -47,9 +49,10 @@ The dashboard preserves `_test_scenario`, `state`, and `priority` from hidden gr
 
 ## Performance tuning
 
-The optimized generator defaults to 25 records per call and two concurrent calls, so a 50-record dataset can be generated in two parallel batches instead of three sequential batches. It also sends compact schema and example JSON to reduce repeated input tokens.
+The generator defaults to 10 records per call and loops until **Number of Records** is reached. With **Keep Dataset Connected Across Calls** enabled, calls run sequentially and each new call receives a compact continuity profile containing earlier distributions, recent record metadata, and the latest identifier. This maintains a coherent fictional organization and taxonomy without sending the full growing dataset back to the model.
 
-- If the proxy/model can process simultaneous requests, keep **Concurrent LLM Calls** at `2`; try `3` or `4` only after checking server capacity.
+- Keep continuity enabled when relationships and stable categories/groups matter. Disable it when maximum generation speed matters more than cross-batch consistency.
+- **Concurrent LLM Calls** is used only when continuity is disabled; try `2` to `4` only after checking server capacity.
 - If the proxy serializes requests or runs close to its memory limit, set concurrency to `1`.
 - Increase **Records per LLM Call** to reduce prompt repetition, but ensure the model has enough context/output-token capacity.
 - Generate only the fields needed for the test. Long descriptions and many output columns dominate generation time.
@@ -58,6 +61,12 @@ The optimized generator defaults to 25 records per call and two concurrent calls
 - For a slow local classifier, start with **Tickets per LLM Call = 1-3** and **Concurrent LLM Calls = 1**. The defaults are 5 and 1.
 - **Request Timeout** defaults to 600 seconds per classifier call. A timeout is not automatically repeated as a JSON-mode fallback.
 - If the model omits ticket IDs but returns the correct number of ordered predictions, the classifier safely restores IDs by batch position. Missing predictions are retried individually and produce a specific error instead of the misleading `BAU Predictions is empty` message.
+
+## Save or load the generated dataset
+
+The standalone flow includes a connected **Write File** component. Set its file name and choose `json` or `csv`, then run that component to save the generator's DataFrame through Langflow's managed file storage.
+
+For a database, connect **Dataset (DataFrame)** to the database-writer component once its interface is defined. The same output contains the complete dataset accumulated across every generation call; the generator does not emit isolated batches downstream.
 
 ## Built-in and custom schemas
 
