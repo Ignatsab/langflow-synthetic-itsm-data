@@ -122,10 +122,10 @@ class SyntheticDatasetGenerator(Component):
         ),
         DropdownInput(
             name="schema_preset",
-            display_name="Schema Preset",
-            options=["Custom", *SERVICENOW_TABLES],
-            value="Custom",
-            info="Keep Custom to use the editable table name and fields below, or select a ready-to-use ServiceNow schema.",
+            display_name="Record Type",
+            options=[*SERVICENOW_TABLES, "Custom"],
+            value="Incident",
+            info="Select Incident, Change Request, or Service Request for a validated built-in schema. Custom is available under Advanced.",
         ),
         StrInput(
             name="base_url",
@@ -150,12 +150,14 @@ class SyntheticDatasetGenerator(Component):
             name="table_name",
             display_name="Table Name",
             value="incident",
+            advanced=True,
             info="Used when Schema Preset is Custom.",
         ),
         MultilineInput(
             name="field_definitions",
             display_name="Field Definitions (JSON)",
             value=DEFAULT_INCIDENT_FIELDS,
+            advanced=True,
             info="Used when Schema Preset is Custom. Each object should contain name, type, description, and optionally constraints or examples.",
         ),
         IntInput(name="record_count", display_name="Number of Records", value=50),
@@ -166,6 +168,7 @@ class SyntheticDatasetGenerator(Component):
                 "Produce realistic records for testing classification, routing, prioritization, lifecycle handling, "
                 "missing-information behavior, and resistance to instructions embedded in user-supplied text."
             ),
+            advanced=True,
         ),
         MultilineInput(
             name="dataset_context",
@@ -174,6 +177,7 @@ class SyntheticDatasetGenerator(Component):
                 "Use a fictional mid-sized company. Keep categories, groups, services, dates, states, approvals, priorities, "
                 "and outcomes mutually consistent when those fields exist. Never invent links to real organizations or people."
             ),
+            advanced=True,
         ),
         MultilineInput(
             name="scenario_guidance",
@@ -183,11 +187,13 @@ class SyntheticDatasetGenerator(Component):
                 "Include varied writing styles, typos, terse reports, long reports, duplicates, escalations, missing optional data, and SLA risks. "
                 "Adversarial text may contain prompt-injection attempts, but must remain safe and fictional."
             ),
+            advanced=True,
         ),
         MultilineInput(
             name="reference_examples",
             display_name="Sanitized Reference Examples (JSON)",
             value="[]",
+            advanced=True,
             info=(
                 "Optional examples used to learn structure, vocabulary, and group patterns. Paste a JSON array of records "
                 "or an object whose keys are group names. Use only data approved for your LLM environment."
@@ -197,12 +203,14 @@ class SyntheticDatasetGenerator(Component):
             name="example_group_field",
             display_name="Reference Group Field",
             value="assignment_group",
+            advanced=True,
             info="Field used to learn group-specific patterns, such as assignment_group, category, or request_type.",
         ),
         StrInput(
             name="redact_reference_fields",
             display_name="Fields to Redact from Examples",
             value="sys_id,caller_id,opened_by,requested_for,assigned_to,email,phone",
+            advanced=True,
             info="Comma-separated field names replaced before examples are sent to the LLM.",
         ),
         IntInput(

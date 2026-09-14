@@ -8,7 +8,7 @@
 
 1. In Langflow, open a project and choose **Upload flow** (or **Import**), then select `servicenow_synthetic_dataset_generator.json`.
 2. Open the **Synthetic ITSM Dataset Generator** component.
-3. Leave **Schema Preset** on **Custom** to edit the table name and field definitions exactly as before, or choose **Incident**, **Change Request**, or **Service Request** to use a built-in schema.
+3. Choose **Incident**, **Change Request**, or **Service Request** from **Record Type**. Incident is selected by default, and each option uses its own internal schema.
 4. Leave **Dry Run** enabled and run once. Inspect **Generation Summary** and **Prompt Preview**.
 5. Enter the LLM proxy **Base URL** and **API Key** if they are not configured in the server environment. The model defaults to `gpt-oss-120b` but remains editable.
 6. Disable **Dry Run**, choose the record count, and run the component. The goal, context, scenario mix, and sanitized examples remain available when customization is needed.
@@ -67,7 +67,7 @@ The ServiceNow data source includes these ready-to-use schemas:
 - **Change Request** (`change_request`)
 - **Service Request** (`sc_request`)
 
-Keep **Schema Preset** on **Custom** to use the editable **Table Name** and **Field Definitions** inputs. Selecting a predefined type makes the generator use its built-in schema; the custom inputs remain in place for switching back at any time.
+The normal component view shows only the safe preset workflow. Open **Advanced**, choose **Custom** from **Record Type**, and edit **Table Name** and **Field Definitions** only when a custom dataset is needed. When a predefined record type is selected, those custom values are ignored, so they cannot accidentally alter the Incident, Change Request, or Service Request schema.
 
 ### Custom Field Definitions format
 
