@@ -106,6 +106,7 @@ def main() -> None:
     evaluator.ground_truth = pd.concat([hidden_truth, unused_truth], ignore_index=True)
     evaluator.predictions = predictions
     evaluator.id_field = "number"
+    evaluator.response_column = "model_response"
     evaluator.target_fields = "category,ticket_type,required_skills,technology,support_level,assignment_group,agent_action"
     evaluator.breakdown_fields = "_test_scenario,state,priority"
     scored, metrics = evaluator._evaluate()
@@ -114,6 +115,27 @@ def main() -> None:
     assert metrics["overall_exact_match"] == 1.0
     assert all(details["accuracy"] == 1.0 for details in metrics["fields"].values())
     assert "_test_scenario" in scored.columns
+
+    batch_predictions = visible.copy()
+    batch_predictions["model_response"] = [
+        json.dumps(
+            {
+                "support_level": level,
+                "confidence": 0.9,
+                "resolution_action": "STOP_WITH_SOLUTION" if level in {"L1", "L2"} else "ESCALATE",
+                "proposed_solution": "Follow the approved runbook.",
+                "verification": "Confirm the reported symptom is gone.",
+            }
+        )
+        for level in truth["_expected_support_level"].tolist()
+    ]
+    evaluator._evaluation_cache = None
+    evaluator.predictions = batch_predictions
+    evaluator.target_fields = "support_level"
+    batch_scored, batch_metrics = evaluator._evaluate()
+    assert batch_metrics["fields"]["support_level"]["accuracy"] == 1.0
+    assert "predicted_resolution_action" in batch_scored.columns
+    assert "predicted_proposed_solution" in batch_scored.columns
 
     dashboard.scored_tickets = scored
     dashboard.scenario_field = "_test_scenario"

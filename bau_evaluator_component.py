@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any
 
 import pandas as pd
@@ -19,6 +20,13 @@ class BAUEvaluator(Component):
         DataFrameInput(name="predictions", display_name="BAU Predictions", required=True),
         StrInput(name="id_field", display_name="Ticket ID Field", value="number"),
         StrInput(
+            name="response_column",
+            display_name="Batch Model Response Column",
+            value="model_response",
+            info="If prediction fields are not already columns, parse them from this JSON response column.",
+            advanced=True,
+        ),
+        StrInput(
             name="target_fields",
             display_name="Fields to Score",
             value="category,ticket_type,required_skills,technology,support_level,assignment_group,agent_action",
@@ -33,6 +41,7 @@ class BAUEvaluator(Component):
 
     outputs = [
         Output(display_name="Scored Tickets", name="scored_tickets", method="build_scored_tickets"),
+        Output(display_name="Resolution Decisions", name="resolution_decisions", method="build_resolution_decisions"),
         Output(display_name="Evaluation Metrics", name="metrics", method="build_metrics"),
         Output(display_name="Evaluation Summary", name="summary", method="build_summary"),
     ]
@@ -56,6 +65,37 @@ class BAUEvaluator(Component):
             return {key: BAUEvaluator._normalize(item) for key, item in sorted(value.items())}
         return value
 
+    @staticmethod
+    def _parse_model_response(value: Any) -> dict[str, Any]:
+        if isinstance(value, dict):
+            return value
+        if not isinstance(value, str) or not value.strip():
+            return {}
+        cleaned = value.strip()
+        fenced = re.fullmatch(r"```(?:json)?\s*(.*?)\s*```", cleaned, flags=re.DOTALL | re.IGNORECASE)
+        if fenced:
+            cleaned = fenced.group(1).strip()
+        try:
+            payload = json.loads(cleaned)
+        except json.JSONDecodeError:
+            start, end = cleaned.find("{"), cleaned.rfind("}")
+            if start < 0 or end <= start:
+                return {}
+            try:
+                payload = json.loads(cleaned[start : end + 1])
+            except json.JSONDecodeError:
+                return {}
+        if not isinstance(payload, dict):
+            return {}
+        if isinstance(payload.get("prediction"), dict):
+            payload = payload["prediction"]
+        aliases = {
+            "level": "support_level",
+            "tier": "support_level",
+            "support_tier": "support_level",
+        }
+        return {aliases.get(str(key), str(key)): item for key, item in payload.items()}
+
     def _evaluate(self) -> tuple[pd.DataFrame, dict[str, Any]]:
         cached = getattr(self, "_evaluation_cache", None)
         if cached is not None:
@@ -74,10 +114,15 @@ class BAUEvaluator(Component):
             else:
                 raise ValueError(f"Ticket ID field '{id_field}' must exist in ground truth and predictions.")
 
-        predicted_by_id = {
-            str(row[id_field]): row
-            for row in predicted.to_dict(orient="records")
-        }
+        response_column = str(self.response_column or "model_response").strip()
+        prediction_rows = []
+        for source_row in predicted.to_dict(orient="records"):
+            row = dict(source_row)
+            parsed = self._parse_model_response(row.get(response_column))
+            for key, value in parsed.items():
+                row.setdefault(key, value)
+            prediction_rows.append(row)
+        predicted_by_id = {str(row[id_field]): row for row in prediction_rows}
         prediction_ids = set(predicted_by_id)
         truth = truth.loc[truth[id_field].map(str).isin(prediction_ids)].reset_index(drop=True)
         if truth.empty:
@@ -92,6 +137,9 @@ class BAUEvaluator(Component):
             ticket_id = str(truth_row[id_field])
             prediction = predicted_by_id.get(ticket_id, {})
             row: dict[str, Any] = {id_field: truth_row[id_field], "prediction_received": bool(prediction)}
+            for field in ("confidence", "resolution_action", "proposed_solution", "verification", "reason"):
+                if field in prediction:
+                    row[f"predicted_{field}"] = prediction.get(field)
             for field in breakdowns:
                 if field in truth_row:
                     row[field] = truth_row.get(field)
@@ -132,6 +180,21 @@ class BAUEvaluator(Component):
     def build_scored_tickets(self) -> DataFrame:
         scored, _ = self._evaluate()
         return DataFrame(scored)
+
+    def build_resolution_decisions(self) -> DataFrame:
+        scored, _ = self._evaluate()
+        preferred = [
+            str(self.id_field or "number").strip(),
+            "predicted_support_level",
+            "correct_support_level",
+            "predicted_confidence",
+            "predicted_resolution_action",
+            "predicted_proposed_solution",
+            "predicted_verification",
+            "predicted_reason",
+        ]
+        columns = [column for column in preferred if column in scored.columns]
+        return DataFrame(scored[columns].copy())
 
     def build_metrics(self) -> Data:
         _, metrics = self._evaluate()

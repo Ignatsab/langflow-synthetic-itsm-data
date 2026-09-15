@@ -36,7 +36,15 @@ DEFAULT_INCIDENT_FIELDS = json.dumps(
         {"name": "_expected_ticket_type", "type": "string", "description": "Ground-truth type, such as incident, service request, access request, security event, or problem candidate."},
         {"name": "_expected_required_skills", "type": "array[string]", "description": "Ground-truth technical skills needed to resolve or triage the ticket."},
         {"name": "_expected_technology", "type": "string", "description": "Ground-truth primary technology or platform involved."},
-        {"name": "_expected_support_level", "type": "string", "description": "Ground-truth support tier: L1, L2, or L3."},
+        {
+            "name": "_expected_support_level",
+            "type": "string",
+            "description": (
+                "Ground-truth support tier by resolution complexity: "
+                "L1=routine/lowest complexity, L2=specialist/intermediate complexity, "
+                "L3=senior solution engineering/highest complexity."
+            ),
+        },
         {"name": "_expected_assignment_group", "type": "string", "description": "Ground-truth resolver group expected from the AI agent."},
         {"name": "_expected_agent_action", "type": "string", "description": "Ground-truth next action expected from the AI agent."},
     ],
@@ -109,7 +117,9 @@ SERVICENOW_TABLES = {
 SERVICENOW_GOALS = {
     "Incident": (
         "Evaluate whether an AI service-desk agent correctly categorizes incidents, assigns the right resolver group, "
-        "recognizes priority and SLA risk, asks for missing information, and recommends the correct next action."
+        "recognizes priority and SLA risk, asks for missing information, recommends the correct next action, and assigns "
+        "support by resolution complexity: L1 for routine/lowest-complexity work, L2 for specialist work, and "
+        "L3 for the highest-complexity senior solution-engineering work."
     ),
     "Change Request": (
         "Evaluate whether an AI change-management agent correctly assesses type, risk, impact, scheduling, approvals, "
@@ -124,7 +134,10 @@ SERVICENOW_GOALS = {
 SERVICENOW_CONTEXTS = {
     "Incident": (
         "Use one fictional mid-sized company with a stable service catalog and resolver-group taxonomy. Keep category, "
-        "subcategory, assignment group, business service, priority, timestamps, state, and resolution mutually consistent."
+        "subcategory, assignment group, business service, priority, timestamps, state, resolution, and expected support "
+        "level mutually consistent. Support level describes resolution complexity and expertise, not business impact: "
+        "L1 is lowest, L2 is intermediate, and L3 is highest. Include enough diagnostic evidence for a safe proposed "
+        "resolution for L1 and L2 incidents; L3 incidents should normally require escalation."
     ),
     "Change Request": (
         "Use one fictional mid-sized company with recurring services and implementation teams. Keep change type, risk, "
@@ -139,7 +152,8 @@ SERVICENOW_CONTEXTS = {
 SERVICENOW_SCENARIOS = {
     "Incident": (
         "Approximately 60% common incidents, 20% edge cases, 10% ambiguous or incomplete/noisy cases, and 10% adversarial cases. "
-        "Include varied writing styles, typos, duplicates, escalations, missing optional data, outages, and SLA risks."
+        "Include varied writing styles, typos, duplicates, escalations, missing optional data, outages, and SLA risks. "
+        "Keep the ground-truth support levels approximately balanced across L1, L2, and L3 while preserving realistic evidence."
     ),
     "Change Request": (
         "Approximately 55% normal changes, 20% standard changes, 10% emergency changes, 10% risky or incomplete plans, and 5% adversarial text. "

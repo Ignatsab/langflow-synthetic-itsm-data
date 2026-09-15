@@ -4,6 +4,10 @@
 
 `know_your_bau_flow.json` is a complete evaluation pipeline that generates labeled tickets, builds a label-free holdout, classifies and routes the tickets, and scores the predictions against hidden ground truth.
 
+`servicenow_support_tier_comparison_flow.json` is the recommended support-tier experiment suite. It uses one generated holdout and three built-in **Batch Run** classifier branches so prompt approaches and models can be compared on exactly the same incidents. Standalone zero-shot, rubric, and few-shot versions are also included.
+
+`servicenow_support_tier_model_comparison_flow.json` keeps the rubric and data identical across three branches, isolating model choice as the experimental variable.
+
 ## Import and configure
 
 1. In Langflow, open a project and choose **Upload flow** (or **Import**), then select `servicenow_synthetic_dataset_generator.json`.
@@ -38,6 +42,28 @@ Import `know_your_bau_flow.json`. It contains five connected components:
 5. **Know Your BAU Evaluation Dashboard** renders an easy-to-read Markdown scorecard and provides separate tables for field performance, scenario performance, routing confusion, and failed tickets.
 
 Both LLM-powered components start in **Dry Run** mode. Enter the same OpenAI-compatible Base URL, API key, and model name in the generator and classification agent. Test each prompt preview, then disable Dry Run on both components.
+
+The support convention is: **L1** is routine/lowest-complexity support, **L2** is specialist/intermediate support, and **L3** is the highest-complexity senior solution-engineering tier. Support tier is based on the expertise needed to resolve an incident, not its business impact or urgency.
+
+Classification and resolution happen in one model call. For a safely resolvable L1 or L2 incident, the model returns concrete `proposed_solution` and `verification` steps with `resolution_action=STOP_WITH_SOLUTION`. It returns `ESCALATE` when evidence is insufficient or the action is destructive, security-sensitive, or requires approval. L3 auto-resolution is off by default: each classifier prompt contains `L3_AUTO_RESOLUTION=false`. Change that policy line to `true` only for a bounded L3 experiment; the flow itself does not update or close ServiceNow records.
+
+## Support-tier model and prompt comparison
+
+Import `servicenow_support_tier_comparison_flow.json` for the fairest experiment. Its three branches use Langflow's default **Batch Run** component:
+
+1. **Zero-shot** states the tier convention with minimal guidance.
+2. **Rubric-based** supplies explicit resolution-complexity indicators and instructs the model not to confuse severity with complexity.
+3. **Few-shot** supplies examples, including high-impact/known-fix and low-impact/engineering cases that test that distinction.
+
+The generator starts in Dry Run. Configure its OpenAI-compatible endpoint, generate the labeled incidents, and keep the Holdout Dataset Builder between the generator and every classifier. In each Batch Run branch, choose any available model provider. Use the same model in all three branches to compare prompts, or different models with the same prompt in the standalone flows to compare models.
+
+For a direct model benchmark, import `servicenow_support_tier_model_comparison_flow.json` and select a different model in Model A, B, and C. All three branches use the exact same rubric, visible fields, and holdout rows, avoiding prompt/data confounding.
+
+Customize **Fields Sent to BAU Agent** on the shared Holdout Dataset Builder. This is a comma-separated allow-list; the ticket ID is always retained and all `_expected_*` labels are always removed. The default uses `number,short_description,description,state,impact,urgency,priority,business_service`. Because Batch Run's **Column Name** is intentionally blank, it serializes all retained fields for each ticket.
+
+Each model returns one compact JSON object per row with `support_level`, `confidence`, `resolution_action`, `proposed_solution`, `verification`, and `reason`. The evaluator parses the built-in Batch Run `model_response` column, scores `support_level` against `_expected_support_level`, preserves the resolution decision for inspection, and the dashboard shows accuracy, scenario breakdowns, tier confusion, and failed tickets.
+
+For statistically useful comparisons, keep the generated dataset fixed, use the same holdout seed and fields, run each configuration multiple times, and record at least support-level accuracy, macro F1, per-tier recall, invalid-response rate, latency, and cost. The included deterministic evaluator reports exact accuracy and confusion-ready rows; export those rows if you want confidence intervals or cost/latency analysis in a notebook.
 
 The Holdout Dataset Builder defaults to 10 randomly selected tickets with a fixed seed. It removes `category`, `subcategory`, `assignment_group`, and all `_expected_*` columns, preventing ground-truth leakage. Add other answer-bearing fields to **Additional Fields to Hide** when you customize the schema. The evaluator independently receives the original generated dataset and keeps only rows whose ticket IDs occur in the agent predictions.
 
@@ -142,6 +168,11 @@ Only provide reference data that is approved for the target LLM environment. Aut
 
 - `servicenow_synthetic_dataset_generator.json`: portable Langflow flow
 - `know_your_bau_flow.json`: complete generation, holdout, classification, and evaluation flow
+- `servicenow_support_tier_comparison_flow.json`: shared-holdout comparison of zero-shot, rubric, and few-shot Batch Run classifiers
+- `servicenow_support_tier_model_comparison_flow.json`: shared-holdout comparison of three models using an identical rubric
+- `servicenow_support_tier_zero_shot_flow.json`: standalone zero-shot classifier experiment
+- `servicenow_support_tier_rubric_flow.json`: standalone rubric-based classifier experiment
+- `servicenow_support_tier_few_shot_flow.json`: standalone few-shot classifier experiment
 - `synthetic_dataset_generator_component.py`: editable component source
 - `holdout_dataset_builder_component.py`: limits the test set and hides labels
 - `know_your_bau_agent_component.py`: OpenAI-compatible BAU classification agent
@@ -149,4 +180,6 @@ Only provide reference data that is approved for the target LLM environment. Aut
 - `bau_evaluation_dashboard_component.py`: visual scorecard, scenario breakdowns, confusion data, and failure tables
 - `build_langflow_artifact.py`: rebuilds the portable JSON inside a compatible Langflow Python environment
 - `build_know_your_bau_flow.py`: assembles the four-node flow
+- `build_support_tier_experiments.py`: assembles the default Batch Run comparison and standalone flows
 - `tests/validate_know_your_bau.py`: validates masking, dry-run classification, and scoring in the Langflow runtime
+- `tests/validate_support_tier_flows.py`: validates graph wiring, tier semantics, auto-resolution policy, field masking, and evaluation configuration
