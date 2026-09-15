@@ -8,6 +8,8 @@
 
 `servicenow_support_tier_model_comparison_flow.json` keeps the rubric and data identical across three branches, isolating model choice as the experimental variable.
 
+`support_engineer_chatbot/l1_l2_incident_resolution_chatbot.json` is a separate conversational assistant for solution engineers. It retrieves similar historical resolutions and KB content, can search Confluence with operator-supplied credentials, and returns cited L1/L2 troubleshooting and verification guidance in the Langflow Playground. See `support_engineer_chatbot/README.md` for setup.
+
 ## Import and configure
 
 1. In Langflow, open a project and choose **Upload flow** (or **Import**), then select `servicenow_synthetic_dataset_generator.json`.

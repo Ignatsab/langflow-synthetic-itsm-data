@@ -1,0 +1,32 @@
+[
+  {
+    "number": "INC-DEMO-001",
+    "short_description": "VPN disconnects after five minutes",
+    "description": "Remote users lose the VPN session shortly after connecting following a client upgrade.",
+    "support_level": "L2",
+    "technology": "Corporate VPN",
+    "resolution_notes": "Confirm the client version and gateway profile. Remove the stale local VPN profile, download the approved profile again, and reconnect. Do not change the production gateway. If multiple users are affected, escalate to Network Support.",
+    "verification": "Maintain a test session for at least 15 minutes and confirm access to one internal service.",
+    "assignment_group": "Network Support"
+  },
+  {
+    "number": "INC-DEMO-002",
+    "short_description": "User account locked after failed sign-ins",
+    "description": "A single user cannot sign in and the directory reports that the account is locked.",
+    "support_level": "L1",
+    "technology": "Directory service",
+    "resolution_notes": "Verify the caller using the approved identity process, check for repeated authentication attempts from saved devices, unlock the account using the service-desk procedure, and require the user to update stale saved credentials.",
+    "verification": "Ask the user to sign in once and confirm no new lockout event appears.",
+    "assignment_group": "Service Desk"
+  },
+  {
+    "number": "INC-DEMO-003",
+    "short_description": "Shared mailbox missing in desktop client",
+    "description": "An approved shared mailbox is available in webmail but is not displayed in the desktop mail client.",
+    "support_level": "L1",
+    "technology": "Email client",
+    "resolution_notes": "Confirm that webmail access works, restart the desktop client, and rebuild only the local mail profile if the approved runbook permits it. Do not modify mailbox permissions when webmail already proves access.",
+    "verification": "Confirm the shared mailbox loads and a test message can be opened without a permission error.",
+    "assignment_group": "Service Desk"
+  }
+]
