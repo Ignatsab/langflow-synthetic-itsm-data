@@ -1,7 +1,9 @@
 import asyncio
+import hashlib
 import json
 import os
 import re
+from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -178,6 +180,18 @@ class SyntheticDatasetGenerator(Component):
             display_name="Dry Run (No LLM Call)",
             value=True,
             info="Preview and validate the prompt without using credentials or calling the model.",
+        ),
+        BoolInput(
+            name="reuse_checkpoint",
+            display_name="Reuse Matching Dataset Checkpoint",
+            value=True,
+            info="Load a saved dataset when it contains at least Number of Records; otherwise continue generating and save it.",
+        ),
+        StrInput(
+            name="checkpoint_name",
+            display_name="Dataset Checkpoint Name",
+            value="servicenow_incidents_checkpoint.json",
+            info="Change this name to start a completely new experiment dataset.",
         ),
         DropdownInput(
             name="schema_preset",
@@ -411,6 +425,65 @@ class SyntheticDatasetGenerator(Component):
             return value.get_secret_value()
         return str(value or "")
 
+    def _checkpoint_path(self) -> Path:
+        directory = Path(os.getenv("LANGFLOW_CHECKPOINT_DIR") or (Path.cwd() / "langflow_checkpoints"))
+        safe_name = Path(str(self.checkpoint_name or "servicenow_incidents_checkpoint.json")).name
+        if not safe_name.endswith(".json"):
+            safe_name += ".json"
+        return directory / safe_name
+
+    def _checkpoint_signature(
+        self,
+        table_name: str,
+        fields: list[dict[str, Any]],
+        examples: list[dict[str, Any]],
+    ) -> str:
+        payload = {
+            "schema_preset": str(self.schema_preset or "Custom"),
+            "table_name": table_name,
+            "fields": fields,
+            "test_goal": str(self.test_goal or ""),
+            "dataset_context": str(self.dataset_context or ""),
+            "scenario_guidance": str(self.scenario_guidance or ""),
+            "reference_examples": examples,
+            "example_group_field": str(self.example_group_field or ""),
+            "maintain_continuity": bool(self.maintain_continuity),
+            "model_name": str(self.model_name or "gpt-oss-120b"),
+            "temperature": float(self.temperature),
+            "use_json_mode": bool(self.use_json_mode),
+        }
+        serialized = json.dumps(payload, sort_keys=True, ensure_ascii=False, default=str)
+        return hashlib.sha256(serialized.encode("utf-8")).hexdigest()
+
+    def _load_checkpoint(self, signature: str) -> list[dict[str, Any]]:
+        if not bool(self.reuse_checkpoint):
+            return []
+        path = self._checkpoint_path()
+        if not path.exists():
+            return []
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict) or payload.get("input_signature") != signature:
+                return []
+            records = payload.get("records", payload) if isinstance(payload, dict) else payload
+            return [record for record in records if isinstance(record, dict)] if isinstance(records, list) else []
+        except (OSError, json.JSONDecodeError):
+            return []
+
+    def _save_checkpoint(self, records: list[dict[str, Any]], signature: str) -> str:
+        path = self._checkpoint_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(
+            json.dumps(
+                {"input_signature": signature, "record_count": len(records), "records": records},
+                indent=2,
+                ensure_ascii=False,
+                default=str,
+            ),
+            encoding="utf-8",
+        )
+        return str(path)
+
     def _system_prompt(self) -> str:
         is_servicenow = str(self.schema_preset or "Custom") != "Custom"
         domain_guidance = (
@@ -601,6 +674,7 @@ class SyntheticDatasetGenerator(Component):
         table_name, _ = self._table_config()
         fields = self._parse_fields()
         examples = self._parse_reference_examples()
+        checkpoint_signature = self._checkpoint_signature(table_name, fields, examples)
         requested = int(self.record_count)
         if requested < 1:
             raise ValueError("Number of Records must be at least 1.")
@@ -619,6 +693,26 @@ class SyntheticDatasetGenerator(Component):
                 "records": [],
                 "prompt_preview": self._preview(fields, examples),
             }
+        checkpoint_records = self._load_checkpoint(checkpoint_signature)
+        if len(checkpoint_records) >= requested:
+            records = checkpoint_records[:requested]
+            return {
+                "dry_run": False,
+                "from_checkpoint": True,
+                "schema_preset": self.schema_preset,
+                "table_name": table_name,
+                "requested_records": requested,
+                "generated_records": len(records),
+                "field_count": len(fields),
+                "reference_example_count": len(examples),
+                "batch_size": batch_size,
+                "generation_calls": 0,
+                "maintain_continuity": bool(self.maintain_continuity),
+                "continuity_profile": self._continuity_profile(records),
+                "records": records,
+                "checkpoint_path": str(self._checkpoint_path()),
+                "prompt_preview": self._preview(fields, examples),
+            }
         base_url = str(self.base_url or os.getenv("OPENAI_COMPATIBLE_BASE_URL") or "").strip()
         api_key = self._secret() or os.getenv("OPENAI_COMPATIBLE_API_KEY") or ""
         model = str(self.model_name or "gpt-oss-120b").strip()
@@ -631,11 +725,14 @@ class SyntheticDatasetGenerator(Component):
                 "Set API Key or configure OPENAI_COMPATIBLE_API_KEY on the Langflow server."
             )
         client = AsyncOpenAI(api_key=api_key, base_url=base_url)
-        records: list[dict[str, Any]] = []
+        records: list[dict[str, Any]] = checkpoint_records[:requested]
         fingerprints: set[str] = set()
+        for record in records:
+            fingerprints.add(json.dumps(record, sort_keys=True, ensure_ascii=False, default=str))
+        remaining_to_generate = requested - len(records)
         batch_counts = [
-            min(batch_size, requested - offset)
-            for offset in range(0, requested, batch_size)
+            min(batch_size, remaining_to_generate - offset)
+            for offset in range(0, remaining_to_generate, batch_size)
         ]
         concurrency = min(max(int(self.max_concurrency), 1), 8)
         semaphore = asyncio.Semaphore(concurrency)
@@ -670,6 +767,7 @@ class SyntheticDatasetGenerator(Component):
                 ) from last_error
 
         def add_records(incoming: list[dict[str, Any]]) -> None:
+            previous_count = len(records)
             for record in incoming:
                 fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False, default=str)
                 if fingerprint not in fingerprints:
@@ -677,6 +775,9 @@ class SyntheticDatasetGenerator(Component):
                     records.append(record)
                     if len(records) >= requested:
                         break
+            if len(records) > previous_count:
+                # Save after every successful chunk so an interrupted generation can resume.
+                self._save_checkpoint(records, checkpoint_signature)
 
         batch_errors: list[str] = []
         if self.maintain_continuity:
@@ -720,8 +821,10 @@ class SyntheticDatasetGenerator(Component):
                 "Try Records per Generation Call = 5, Concurrent LLM Calls = 1, or a smaller Number of Records."
             )
         records = records[:requested]
+        checkpoint_path = self._save_checkpoint(records, checkpoint_signature)
         return {
             "dry_run": False,
+            "from_checkpoint": bool(checkpoint_records),
             "schema_preset": self.schema_preset,
             "table_name": table_name,
             "requested_records": requested,
@@ -733,6 +836,7 @@ class SyntheticDatasetGenerator(Component):
             "maintain_continuity": bool(self.maintain_continuity),
             "continuity_profile": self._continuity_profile(records),
             "records": records,
+            "checkpoint_path": checkpoint_path,
             "prompt_preview": self._preview(fields, examples),
         }
 
@@ -770,11 +874,13 @@ class SyntheticDatasetGenerator(Component):
                 "Enter the proxy settings, switch Dry Run off, and run again to generate data."
             )
         else:
+            source = "Loaded" if result.get("from_checkpoint") and result.get("generation_calls") == 0 else "Generated"
             continuity = " with continuity enabled" if result["maintain_continuity"] else ""
             text = (
-                f"Generated {result['generated_records']} synthetic records for table '{result['table_name']}' "
+                f"{source} {result['generated_records']} synthetic records for table '{result['table_name']}' "
                 f"in batches of up to {result['batch_size']}{continuity}. "
-                f"The dataset has {result['field_count']} fields and used {result['reference_example_count']} sanitized reference examples."
+                f"The dataset has {result['field_count']} fields and used {result['reference_example_count']} sanitized reference examples. "
+                f"Checkpoint: {result.get('checkpoint_path', 'not saved')}."
             )
         return Message(text=text)
 

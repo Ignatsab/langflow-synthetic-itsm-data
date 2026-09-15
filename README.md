@@ -57,6 +57,21 @@ Import `servicenow_support_tier_comparison_flow.json` for the fairest experiment
 
 The generator starts in Dry Run. Configure its OpenAI-compatible endpoint, generate the labeled incidents, and keep the Holdout Dataset Builder between the generator and every classifier. In each Batch Run branch, choose any available model provider. Use the same model in all three branches to compare prompts, or different models with the same prompt in the standalone flows to compare models.
 
+### Run the complete experiment and resume safely
+
+After configuring the generator and the three Batch Run model selectors, run only the final **Run Complete Experiment** component. Because it depends on every dashboard and checkpoint receipt, Langflow executes the complete upstream graph automatically. The three classifier branches are chained in sequence and each classifier defaults to **Max Concurrent Requests = 1**, which is deliberately conservative for a local endpoint.
+
+The comparison flows contain eight default **Write File** checkpoints: generated data, visible holdout data, predictions and scored results for each of the three branches. They overwrite their named JSON snapshot on a successful run and the final component lists every saved path alongside all three dashboards.
+
+There are also automatic resume checkpoints inside the expensive components:
+
+- The generator saves after every successful generation chunk. A rerun with the same generator configuration and **Dataset Checkpoint Name** resumes from those records.
+- Each Batch Run saves completed predictions. A rerun reuses them only when the incident table, prompt, selected model, and relevant settings match.
+- Change a checkpoint name or disable **Reuse Matching ... Checkpoint** when you intentionally want a fresh run.
+- Changing the source fields, prompt, model, or other fingerprinted settings invalidates the matching cache automatically. Existing human-readable Write File snapshots remain available as backups.
+
+If a later branch fails, fix its endpoint/model setting and run **Run Complete Experiment** again. Completed generation and classifier branches are read from matching checkpoints, while the failed or changed branch is recomputed.
+
 For a direct model benchmark, import `servicenow_support_tier_model_comparison_flow.json` and select a different model in Model A, B, and C. All three branches use the exact same rubric, visible fields, and holdout rows, avoiding prompt/data confounding.
 
 Customize **Fields Sent to BAU Agent** on the shared Holdout Dataset Builder. This is a comma-separated allow-list; the ticket ID is always retained and all `_expected_*` labels are always removed. The default uses `number,short_description,description,state,impact,urgency,priority,business_service`. Because Batch Run's **Column Name** is intentionally blank, it serializes all retained fields for each ticket.
@@ -77,7 +92,7 @@ The dashboard preserves `_test_scenario`, `state`, and `priority` from hidden gr
 
 The generator defaults to 10 records per call and loops until **Number of Records** is reached. With **Keep Dataset Connected Across Calls** enabled, calls run sequentially and each new call receives a compact continuity profile containing earlier distributions, recent record metadata, and the latest identifier. This maintains a coherent fictional organization and taxonomy without sending the full growing dataset back to the model.
 
-Ten is a per-request chunk size, not a dataset limit. The generator retries each failed chunk up to three times, and the support-tier flows cap the built-in Batch Run classifier at **Max Concurrent Requests = 2** with three request attempts. This prevents a 30-100 row holdout from launching every model request simultaneously.
+Ten is a per-request chunk size, not a dataset limit. The generator retries each failed chunk up to three times, and the support-tier comparison flows cap the built-in Batch Run classifier at **Max Concurrent Requests = 1** with three request attempts. This prevents a 30-100 row holdout from launching every model request simultaneously.
 
 - Keep continuity enabled when relationships and stable categories/groups matter. Disable it when maximum generation speed matters more than cross-batch consistency.
 - **Concurrent LLM Calls** is used only when continuity is disabled; try `2` to `4` only after checking server capacity.
@@ -86,7 +101,7 @@ Ten is a per-request chunk size, not a dataset limit. The generator retries each
 - Generate only the fields needed for the test. Long descriptions and many output columns dominate generation time.
 - For quick iterations, generate 10-20 source tickets and set the holdout sample to 5. Scale up only for final evaluation.
 - For 50-100 source tickets, keep **Records per Generation Call** at `5` or `10`, **Keep Dataset Connected Across Calls** enabled, and **Concurrent LLM Calls** at `1`. Set **Tickets to Test** independently; generating 100 tickets does not require classifying all 100 in one experiment.
-- If classification still overloads a local model, reduce **Max Concurrent Requests** on each Batch Run classifier from `2` to `1`.
+- After a stable run, increase **Max Concurrent Requests** on each Batch Run classifier from `1` to `2` only if the endpoint has spare capacity.
 - The classification agent also batches tickets and supports concurrent calls independently.
 - For a slow local classifier, start with **Tickets per LLM Call = 1-3** and **Concurrent LLM Calls = 1**. The defaults are 5 and 1.
 - **Request Timeout** defaults to 600 seconds per classifier call. A timeout is not automatically repeated as a JSON-mode fallback.
