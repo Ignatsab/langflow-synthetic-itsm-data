@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import re
+import tempfile
 from pathlib import Path
 from typing import Any
 
@@ -426,7 +427,10 @@ class SyntheticDatasetGenerator(Component):
         return str(value or "")
 
     def _checkpoint_path(self) -> Path:
-        directory = Path(os.getenv("LANGFLOW_CHECKPOINT_DIR") or (Path.cwd() / "langflow_checkpoints"))
+        directory = Path(
+            os.getenv("LANGFLOW_CHECKPOINT_DIR")
+            or (Path(tempfile.gettempdir()) / "langflow_checkpoints")
+        )
         safe_name = Path(str(self.checkpoint_name or "servicenow_incidents_checkpoint.json")).name
         if not safe_name.endswith(".json"):
             safe_name += ".json"
@@ -472,17 +476,22 @@ class SyntheticDatasetGenerator(Component):
 
     def _save_checkpoint(self, records: list[dict[str, Any]], signature: str) -> str:
         path = self._checkpoint_path()
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(
-            json.dumps(
-                {"input_signature": signature, "record_count": len(records), "records": records},
-                indent=2,
-                ensure_ascii=False,
-                default=str,
-            ),
-            encoding="utf-8",
-        )
-        return str(path)
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            path.write_text(
+                json.dumps(
+                    {"input_signature": signature, "record_count": len(records), "records": records},
+                    indent=2,
+                    ensure_ascii=False,
+                    default=str,
+                ),
+                encoding="utf-8",
+            )
+            return str(path)
+        except OSError as exc:
+            # A checkpoint is a recovery aid; storage restrictions must not invalidate generated data.
+            self._checkpoint_warning = f"Checkpoint could not be saved: {exc}"
+            return ""
 
     def _system_prompt(self) -> str:
         is_servicenow = str(self.schema_preset or "Custom") != "Custom"
@@ -711,6 +720,7 @@ class SyntheticDatasetGenerator(Component):
                 "continuity_profile": self._continuity_profile(records),
                 "records": records,
                 "checkpoint_path": str(self._checkpoint_path()),
+                "checkpoint_warning": "",
                 "prompt_preview": self._preview(fields, examples),
             }
         base_url = str(self.base_url or os.getenv("OPENAI_COMPATIBLE_BASE_URL") or "").strip()
@@ -837,6 +847,7 @@ class SyntheticDatasetGenerator(Component):
             "continuity_profile": self._continuity_profile(records),
             "records": records,
             "checkpoint_path": checkpoint_path,
+            "checkpoint_warning": str(getattr(self, "_checkpoint_warning", "")),
             "prompt_preview": self._preview(fields, examples),
         }
 
@@ -880,8 +891,10 @@ class SyntheticDatasetGenerator(Component):
                 f"{source} {result['generated_records']} synthetic records for table '{result['table_name']}' "
                 f"in batches of up to {result['batch_size']}{continuity}. "
                 f"The dataset has {result['field_count']} fields and used {result['reference_example_count']} sanitized reference examples. "
-                f"Checkpoint: {result.get('checkpoint_path', 'not saved')}."
+                f"Checkpoint: {result.get('checkpoint_path') or 'not saved'}."
             )
+            if result.get("checkpoint_warning"):
+                text += f" {result['checkpoint_warning']} Generation still completed successfully."
         return Message(text=text)
 
     async def build_prompt_preview(self) -> Message:

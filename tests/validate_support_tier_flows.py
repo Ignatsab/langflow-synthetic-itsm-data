@@ -57,6 +57,8 @@ def validate_flow(path: Path) -> None:
         assert "with_retry(stop_after_attempt=3)" in code
         assert "input_fingerprint =" in code
         assert "Reusing predictions checkpoint" in code
+        assert "tempfile.gettempdir()" in code
+        assert "except OSError as checkpoint_error" in code
 
     holdout = next(node for node in nodes if node["data"]["type"] == "HoldoutDatasetBuilder")
     visible_fields = holdout["data"]["node"]["template"]["visible_fields"]["value"]
@@ -76,8 +78,12 @@ def validate_flow(path: Path) -> None:
     generator_code = generator_template["code"]["value"]
     assert "input_signature" in generator_code
     assert "Save after every successful chunk" in generator_code
+    assert "tempfile.gettempdir()" in generator_code
+    assert "storage restrictions must not invalidate generated data" in generator_code
 
     if "comparison" in path.name:
+        assert generator_template["record_count"]["value"] == 10
+        assert holdout["data"]["node"]["template"]["sample_size"]["value"] == 10
         assert types.count("SaveToFile") == 8
         assert types.count("ExperimentRunCollector") == 1
         run_after_edges = [

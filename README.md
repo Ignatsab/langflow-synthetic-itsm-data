@@ -57,6 +57,8 @@ Import `servicenow_support_tier_comparison_flow.json` for the fairest experiment
 
 The generator starts in Dry Run. Configure its OpenAI-compatible endpoint, generate the labeled incidents, and keep the Holdout Dataset Builder between the generator and every classifier. In each Batch Run branch, choose any available model provider. Use the same model in all three branches to compare prompts, or different models with the same prompt in the standalone flows to compare models.
 
+The importable comparison flows intentionally start with **10 generated records** and **10 tickets to test**. Confirm that baseline first, then increase **Number of Records** while keeping **Records per Generation Call** at `5` or `10`.
+
 ### Run the complete experiment and resume safely
 
 After configuring the generator and the three Batch Run model selectors, run only the final **Run Complete Experiment** component. Because it depends on every dashboard and checkpoint receipt, Langflow executes the complete upstream graph automatically. The three classifier branches are chained in sequence and each classifier defaults to **Max Concurrent Requests = 1**, which is deliberately conservative for a local endpoint.
@@ -69,6 +71,7 @@ There are also automatic resume checkpoints inside the expensive components:
 - Each Batch Run saves completed predictions. A rerun reuses them only when the incident table, prompt, selected model, and relevant settings match.
 - Change a checkpoint name or disable **Reuse Matching ... Checkpoint** when you intentionally want a fresh run.
 - Changing the source fields, prompt, model, or other fingerprinted settings invalidates the matching cache automatically. Existing human-readable Write File snapshots remain available as backups.
+- Internal recovery checkpoints default to the runtime's writable temporary directory. If checkpoint storage is unavailable, generation/classification continues and reports a warning instead of failing the successful model work.
 
 If a later branch fails, fix its endpoint/model setting and run **Run Complete Experiment** again. Completed generation and classifier branches are read from matching checkpoints, while the failed or changed branch is recomputed.
 

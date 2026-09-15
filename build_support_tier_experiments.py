@@ -212,9 +212,9 @@ def artifact(name: str, description: str, nodes: list[dict[str, Any]], edges: li
 
 def configure_shared(generator: dict[str, Any], holdout: dict[str, Any]) -> None:
     set_value(generator, "schema_preset", "Incident")
-    set_value(generator, "record_count", 60)
+    set_value(generator, "record_count", 10)
     set_value(generator, "dry_run", True)
-    set_value(holdout, "sample_size", 30)
+    set_value(holdout, "sample_size", 10)
     set_value(holdout, "fields_to_hide", "category,subcategory,assignment_group,resolution_notes,close_code")
     set_value(
         holdout,
@@ -327,7 +327,7 @@ def configure_batch(batch: dict[str, Any], approach: dict[str, str]) -> None:
     if "name=\"reuse_checkpoint\"" not in code:
         code = code.replace(
             "from typing import Any, cast\n\nimport toml",
-            "from typing import Any, cast\nfrom pathlib import Path\n\nimport hashlib\nimport json\nimport os\nimport pandas as pd\nimport toml",
+            "from typing import Any, cast\nfrom pathlib import Path\n\nimport hashlib\nimport json\nimport os\nimport pandas as pd\nimport tempfile\nimport toml",
             1,
         )
         code = code.replace(
@@ -348,12 +348,17 @@ def configure_batch(batch: dict[str, Any], approach: dict[str, str]) -> None:
         )
         code = code.replace(
             "            await logger.ainfo(\"Batch processing completed successfully\")\n            return DataFrame(rows)",
-            "            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)\n"
-            "            checkpoint_path.write_text(\n"
-            "                json.dumps({\"input_fingerprint\": input_fingerprint, \"records\": rows}, indent=2, default=str),\n"
-            "                encoding=\"utf-8\",\n"
-            "            )\n"
-            "            await logger.ainfo(f\"Batch processing completed; checkpoint saved to {checkpoint_path}\")\n"
+            "            try:\n"
+            "                checkpoint_path.parent.mkdir(parents=True, exist_ok=True)\n"
+            "                checkpoint_path.write_text(\n"
+            "                    json.dumps({\"input_fingerprint\": input_fingerprint, \"records\": rows}, indent=2, default=str),\n"
+            "                    encoding=\"utf-8\",\n"
+            "                )\n"
+            "                await logger.ainfo(f\"Batch processing completed; checkpoint saved to {checkpoint_path}\")\n"
+            "            except OSError as checkpoint_error:\n"
+            "                await logger.awarning(\n"
+            "                    f\"Predictions completed but checkpoint could not be saved: {checkpoint_error}\"\n"
+            "                )\n"
             "            return DataFrame(rows)",
             1,
         )
@@ -395,7 +400,8 @@ def configure_batch(batch: dict[str, Any], approach: dict[str, str]) -> None:
             "            json.dumps(fingerprint_payload, sort_keys=True, default=str).encode(\"utf-8\")\n"
             "        ).hexdigest()\n"
             "        checkpoint_dir = Path(\n"
-            "            os.getenv(\"LANGFLOW_CHECKPOINT_DIR\") or (Path.cwd() / \"langflow_checkpoints\")\n"
+            "            os.getenv(\"LANGFLOW_CHECKPOINT_DIR\")\n"
+            "            or (Path(tempfile.gettempdir()) / \"langflow_checkpoints\")\n"
             "        )\n"
             "        checkpoint_name = Path(str(self.checkpoint_name or \"batch_predictions_checkpoint.json\")).name\n"
             "        if not checkpoint_name.endswith(\".json\"):\n"
@@ -416,6 +422,37 @@ def configure_batch(batch: dict[str, Any], approach: dict[str, str]) -> None:
             1,
         )
         template["code"]["value"] = code
+    code = template["code"]["value"]
+    if "import tempfile" not in code:
+        code = code.replace("import pandas as pd\n", "import pandas as pd\nimport tempfile\n", 1)
+    code = code.replace(
+        "os.getenv(\"LANGFLOW_CHECKPOINT_DIR\") or (Path.cwd() / \"langflow_checkpoints\")",
+        "os.getenv(\"LANGFLOW_CHECKPOINT_DIR\")\n"
+        "            or (Path(tempfile.gettempdir()) / \"langflow_checkpoints\")",
+    )
+    unsafe_checkpoint_save = (
+        "            checkpoint_path.parent.mkdir(parents=True, exist_ok=True)\n"
+        "            checkpoint_path.write_text(\n"
+        "                json.dumps({\"input_fingerprint\": input_fingerprint, \"records\": rows}, indent=2, default=str),\n"
+        "                encoding=\"utf-8\",\n"
+        "            )\n"
+        "            await logger.ainfo(f\"Batch processing completed; checkpoint saved to {checkpoint_path}\")\n"
+    )
+    safe_checkpoint_save = (
+        "            try:\n"
+        "                checkpoint_path.parent.mkdir(parents=True, exist_ok=True)\n"
+        "                checkpoint_path.write_text(\n"
+        "                    json.dumps({\"input_fingerprint\": input_fingerprint, \"records\": rows}, indent=2, default=str),\n"
+        "                    encoding=\"utf-8\",\n"
+        "                )\n"
+        "                await logger.ainfo(f\"Batch processing completed; checkpoint saved to {checkpoint_path}\")\n"
+        "            except OSError as checkpoint_error:\n"
+        "                await logger.awarning(\n"
+        "                    f\"Predictions completed but checkpoint could not be saved: {checkpoint_error}\"\n"
+        "                )\n"
+    )
+    code = code.replace(unsafe_checkpoint_save, safe_checkpoint_save, 1)
+    template["code"]["value"] = code
     template["code"]["value"] = template["code"]["value"].replace(
         "info=\"Limits simultaneous model calls so larger tables do not overload the endpoint.\",\n"
         "            value=2,",
