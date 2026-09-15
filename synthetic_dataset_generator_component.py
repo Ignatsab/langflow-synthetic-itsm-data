@@ -646,15 +646,28 @@ class SyntheticDatasetGenerator(Component):
             continuity_profile: dict[str, Any] | None = None,
         ) -> list[dict[str, Any]]:
             async with semaphore:
-                return await self._request_batch(
-                    client,
-                    fields,
-                    examples,
-                    count,
-                    batch_number,
-                    model,
-                    continuity_profile,
-                )
+                last_error: Exception | None = None
+                for attempt in range(3):
+                    try:
+                        batch = await self._request_batch(
+                            client,
+                            fields,
+                            examples,
+                            count,
+                            batch_number,
+                            model,
+                            continuity_profile,
+                        )
+                        if batch:
+                            return batch
+                        raise ValueError("The model returned an empty records array.")
+                    except Exception as exc:  # noqa: BLE001 - retry transient proxy and malformed-output failures
+                        last_error = exc
+                        if attempt < 2:
+                            await asyncio.sleep(1 + attempt)
+                raise ValueError(
+                    f"Generation batch {batch_number} failed after 3 attempts: {last_error}"
+                ) from last_error
 
         def add_records(incoming: list[dict[str, Any]]) -> None:
             for record in incoming:
@@ -665,18 +678,26 @@ class SyntheticDatasetGenerator(Component):
                     if len(records) >= requested:
                         break
 
+        batch_errors: list[str] = []
         if self.maintain_continuity:
             for batch_number, count in enumerate(batch_counts, start=1):
                 profile = self._continuity_profile(records)
-                add_records(await run_batch(batch_number, count, profile))
+                try:
+                    add_records(await run_batch(batch_number, count, profile))
+                except Exception as exc:  # noqa: BLE001 - later fill calls can recover this missing chunk
+                    batch_errors.append(str(exc))
                 if len(records) >= requested:
                     break
         else:
             initial_batches = await asyncio.gather(
-                *(run_batch(number, count) for number, count in enumerate(batch_counts, start=1))
+                *(run_batch(number, count) for number, count in enumerate(batch_counts, start=1)),
+                return_exceptions=True,
             )
             for incoming in initial_batches:
-                add_records(incoming)
+                if isinstance(incoming, Exception):
+                    batch_errors.append(str(incoming))
+                else:
+                    add_records(incoming)
                 if len(records) >= requested:
                     break
 
@@ -686,10 +707,18 @@ class SyntheticDatasetGenerator(Component):
             if remaining <= 0:
                 break
             profile = self._continuity_profile(records) if self.maintain_continuity else None
-            add_records(await run_batch(retry_number, min(remaining, batch_size), profile))
+            try:
+                add_records(await run_batch(retry_number, min(remaining, batch_size), profile))
+            except Exception as exc:  # noqa: BLE001 - report all failed fill attempts together
+                batch_errors.append(str(exc))
             retry_number += 1
         if len(records) < requested:
-            raise ValueError(f"The model produced only {len(records)} unique valid records after retries; requested {requested}.")
+            error_summary = "; ".join(batch_errors[-3:])
+            raise ValueError(
+                f"The model produced {len(records)} of {requested} unique valid records after chunk retries. "
+                f"Recent batch errors: {error_summary or 'the model repeatedly returned too few unique records'}. "
+                "Try Records per Generation Call = 5, Concurrent LLM Calls = 1, or a smaller Number of Records."
+            )
         records = records[:requested]
         return {
             "dry_run": False,

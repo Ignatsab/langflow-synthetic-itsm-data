@@ -39,6 +39,10 @@ def validate_flow(path: Path) -> None:
         assert "L3_AUTO_RESOLUTION=false" in instructions
         assert template["column_name"]["value"] == ""
         assert template["output_column_name"]["value"] == "model_response"
+        assert template["max_concurrency"]["value"] == 2
+        code = template["code"]["value"]
+        assert 'config={"max_concurrency"' in code
+        assert "with_retry(stop_after_attempt=3)" in code
 
     holdout = next(node for node in nodes if node["data"]["type"] == "HoldoutDatasetBuilder")
     visible_fields = holdout["data"]["node"]["template"]["visible_fields"]["value"]

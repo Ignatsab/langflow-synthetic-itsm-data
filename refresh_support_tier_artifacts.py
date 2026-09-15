@@ -37,6 +37,62 @@ def approach_prompts() -> dict[str, str]:
     return {key: value["instructions"] for key, value in approaches.items()}
 
 
+def harden_batch_node(node: dict[str, Any]) -> None:
+    frontend = node["data"]["node"]
+    template = frontend["template"]
+    code = template["code"]["value"]
+    if "name=\"max_concurrency\"" not in code:
+        code = code.replace("    DropdownInput,\n", "    DropdownInput,\n    IntInput,\n", 1)
+        code = code.replace(
+            "        BoolInput(\n            name=\"enable_metadata\",",
+            "        IntInput(\n"
+            "            name=\"max_concurrency\",\n"
+            "            display_name=\"Max Concurrent Requests\",\n"
+            "            info=\"Limits simultaneous model calls so larger tables do not overload the endpoint.\",\n"
+            "            value=2,\n"
+            "            advanced=True,\n"
+            "        ),\n"
+            "        BoolInput(\n            name=\"enable_metadata\",",
+            1,
+        )
+        code = code.replace(
+            "await model.abatch(list(conversations))",
+            "await model.with_retry(stop_after_attempt=3).abatch(\n"
+            "                        list(conversations),\n"
+            "                        config={\"max_concurrency\": min(max(int(self.max_concurrency), 1), 32)},\n"
+            "                    )",
+            1,
+        )
+        template["code"]["value"] = code
+    template.setdefault(
+        "max_concurrency",
+        {
+            "_input_type": "IntInput",
+            "advanced": True,
+            "display_name": "Max Concurrent Requests",
+            "dynamic": False,
+            "info": "Limits simultaneous model calls so larger tables do not overload the endpoint.",
+            "input_types": [],
+            "list": False,
+            "list_add_label": "Add More",
+            "load_from_db": False,
+            "name": "max_concurrency",
+            "override_skip": False,
+            "placeholder": "",
+            "required": False,
+            "show": True,
+            "title_case": False,
+            "tool_mode": False,
+            "trace_as_metadata": True,
+            "track_in_telemetry": True,
+            "type": "int",
+            "value": 2,
+        },
+    )
+    if "max_concurrency" not in frontend.get("field_order", []):
+        frontend.setdefault("field_order", []).append("max_concurrency")
+
+
 def sync_node(node: dict[str, Any], prompts: dict[str, str], flow_name: str) -> None:
     node_type = node.get("data", {}).get("type")
     template = node.get("data", {}).get("node", {}).get("template", {})
@@ -78,6 +134,7 @@ def sync_node(node: dict[str, Any], prompts: dict[str, str], flow_name: str) -> 
                 },
             )
     elif node_type == "BatchRunComponent":
+        harden_batch_node(node)
         title = node.get("data", {}).get("display_name", "").casefold()
         if "model comparison" in flow_name.casefold() or "identical rubric" in title:
             key = "rubric"
