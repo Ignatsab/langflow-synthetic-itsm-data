@@ -233,7 +233,7 @@ class SyntheticDatasetGenerator(Component):
             value=DEFAULT_INCIDENT_FIELDS,
             info="Shows the selected schema with field descriptions. Built-in presets use their protected schema; select Custom to edit it.",
         ),
-        IntInput(name="record_count", display_name="Number of Records", value=50),
+        IntInput(name="record_count", display_name="Number of Records", value=100),
         MultilineInput(
             name="test_goal",
             display_name="Test Goal",
@@ -275,15 +275,22 @@ class SyntheticDatasetGenerator(Component):
         IntInput(
             name="max_reference_examples",
             display_name="Maximum Reference Examples",
-            value=20,
+            value=12,
             advanced=True,
-            info="Caps prompt size. Select a representative mix across the groups you want to test.",
+            info="Maximum examples retained overall; only a smaller rotating subset is sent on each call.",
+        ),
+        IntInput(
+            name="reference_examples_per_call",
+            display_name="Reference Examples per Call",
+            value=3,
+            advanced=True,
+            info="Bounds per-call context while rotating through the retained examples across batches.",
         ),
         IntInput(
             name="batch_size",
             display_name="Records per Generation Call",
-            value=10,
-            info="The component loops until Number of Records is reached. Keep this at 10 for models with a smaller context window.",
+            value=5,
+            info="The component loops until Number of Records is reached. Use 3-5 for a small-context model.",
         ),
         BoolInput(
             name="maintain_continuity",
@@ -294,14 +301,14 @@ class SyntheticDatasetGenerator(Component):
         IntInput(
             name="continuity_sample_size",
             display_name="Recent Records in Continuity Profile",
-            value=3,
+            value=2,
             advanced=True,
             info="Number of compact recent records included alongside distribution summaries. Capped at 10.",
         ),
         IntInput(
             name="max_concurrency",
             display_name="Concurrent LLM Calls",
-            value=2,
+            value=1,
             advanced=True,
             info="Used only when connected-dataset continuity is disabled. Use 1 for a single-threaded local server.",
         ),
@@ -311,6 +318,27 @@ class SyntheticDatasetGenerator(Component):
             value=True,
             advanced=True,
             info="Reduces repeated input tokens by sending schema and examples as compact JSON.",
+        ),
+        IntInput(
+            name="max_output_tokens",
+            display_name="Maximum Output Tokens per Call",
+            value=4096,
+            advanced=True,
+            info="Caps each small generation response. Set 0 only if the endpoint does not accept max_tokens.",
+        ),
+        IntInput(
+            name="max_fill_attempts",
+            display_name="Maximum Recovery Batches",
+            value=20,
+            advanced=True,
+            info="Additional small batches allowed when responses fail, truncate, or contain duplicates.",
+        ),
+        IntInput(
+            name="request_timeout",
+            display_name="Request Timeout (Seconds)",
+            value=300,
+            advanced=True,
+            info="Timeout for each individual generation request.",
         ),
         FloatInput(name="temperature", display_name="Temperature", value=0.7, advanced=True),
         BoolInput(
@@ -451,7 +479,10 @@ class SyntheticDatasetGenerator(Component):
             "scenario_guidance": str(self.scenario_guidance or ""),
             "reference_examples": examples,
             "example_group_field": str(self.example_group_field or ""),
+            "reference_examples_per_call": int(self.reference_examples_per_call),
             "maintain_continuity": bool(self.maintain_continuity),
+            "continuity_sample_size": int(self.continuity_sample_size),
+            "compact_prompt": bool(self.compact_prompt),
             "model_name": str(self.model_name or "gpt-oss-120b"),
             "temperature": float(self.temperature),
             "use_json_mode": bool(self.use_json_mode),
@@ -591,14 +622,43 @@ class SyntheticDatasetGenerator(Component):
         json_options = {"ensure_ascii": False}
         if self.compact_prompt:
             json_options["separators"] = (",", ":")
+            prompt_fields = [
+                {
+                    "n": str(field.get("name", "")),
+                    "t": str(field.get("type", "string")),
+                    "r": str(field.get("description", ""))[:220],
+                }
+                for field in fields
+            ]
         else:
             json_options["indent"] = 2
+            prompt_fields = fields
+
+        example_limit = min(max(int(self.reference_examples_per_call), 0), 10)
+        selected_examples: list[dict[str, Any]] = []
+        if examples and example_limit:
+            start = ((batch_number - 1) * example_limit) % len(examples)
+            selected_examples = [
+                examples[(start + offset) % len(examples)]
+                for offset in range(min(example_limit, len(examples)))
+            ]
+
+        def compact_example_value(value: Any) -> Any:
+            if isinstance(value, dict):
+                return {key: compact_example_value(item) for key, item in value.items()}
+            if isinstance(value, list):
+                return [compact_example_value(item) for item in value[:12]]
+            if isinstance(value, str):
+                return value[:500]
+            return value
+
+        selected_examples = [compact_example_value(example) for example in selected_examples]
         examples_text = (
-            json.dumps(examples, **json_options)
-            if examples
+            json.dumps(selected_examples, **json_options)
+            if selected_examples
             else "No reference examples supplied."
         )
-        fields_text = json.dumps(fields, **json_options)
+        fields_text = json.dumps(prompt_fields, **json_options)
         continuity_text = (
             json.dumps(continuity_profile, **json_options)
             if continuity_profile
@@ -610,7 +670,7 @@ class SyntheticDatasetGenerator(Component):
             f"TEST GOAL\n{self.test_goal}\n\n"
             f"DATASET CONTEXT AND RELATIONSHIPS\n{self.dataset_context}\n\n"
             f"SCENARIO MIX\n{self.scenario_guidance}\n\n"
-            f"FIELD DEFINITIONS\n{fields_text}\n\n"
+            f"FIELD DEFINITIONS ({'n=name,t=type,r=requirement' if self.compact_prompt else 'full'})\n{fields_text}\n\n"
             f"SANITIZED REFERENCE EXAMPLES\n{examples_text}\n\n"
             f"REFERENCE GROUP FIELD\n{self.example_group_field}\n\n"
             f"EARLIER DATASET CONTINUITY PROFILE\n{continuity_text}\n\n"
@@ -665,15 +725,24 @@ class SyntheticDatasetGenerator(Component):
             ],
             "temperature": float(self.temperature),
         }
+        max_output_tokens = max(int(self.max_output_tokens), 0)
+        if max_output_tokens:
+            kwargs["max_tokens"] = max_output_tokens
         if self.use_json_mode:
             kwargs["response_format"] = {"type": "json_object"}
-        try:
-            response = await client.chat.completions.create(**kwargs)
-        except BadRequestError:
-            if "response_format" not in kwargs:
+        while True:
+            try:
+                response = await client.chat.completions.create(**kwargs)
+                break
+            except BadRequestError:
+                # OpenAI-compatible proxies vary in which optional parameters they accept.
+                if "response_format" in kwargs:
+                    kwargs.pop("response_format")
+                    continue
+                if "max_tokens" in kwargs:
+                    kwargs.pop("max_tokens")
+                    continue
                 raise
-            kwargs.pop("response_format")
-            response = await client.chat.completions.create(**kwargs)
         content = response.choices[0].message.content
         if not isinstance(content, str) or not content.strip():
             raise ValueError("The model returned an empty response.")
@@ -734,8 +803,12 @@ class SyntheticDatasetGenerator(Component):
             raise ValueError(
                 "Set API Key or configure OPENAI_COMPATIBLE_API_KEY on the Langflow server."
             )
-        client = AsyncOpenAI(api_key=api_key, base_url=base_url)
+        request_timeout = min(max(int(self.request_timeout), 10), 1800)
+        client = AsyncOpenAI(api_key=api_key, base_url=base_url, timeout=request_timeout, max_retries=0)
         records: list[dict[str, Any]] = checkpoint_records[:requested]
+        field_names = {str(field.get("name", "")) for field in fields}
+        seen_numbers = {str(record.get("number")) for record in records if record.get("number")}
+        seen_sys_ids = {str(record.get("sys_id")) for record in records if record.get("sys_id")}
         fingerprints: set[str] = set()
         for record in records:
             fingerprints.add(json.dumps(record, sort_keys=True, ensure_ascii=False, default=str))
@@ -753,41 +826,86 @@ class SyntheticDatasetGenerator(Component):
             continuity_profile: dict[str, Any] | None = None,
         ) -> list[dict[str, Any]]:
             async with semaphore:
-                last_error: Exception | None = None
-                for attempt in range(3):
-                    try:
-                        batch = await self._request_batch(
-                            client,
-                            fields,
-                            examples,
-                            count,
-                            batch_number,
-                            model,
-                            continuity_profile,
-                        )
-                        if batch:
-                            return batch
-                        raise ValueError("The model returned an empty records array.")
-                    except Exception as exc:  # noqa: BLE001 - retry transient proxy and malformed-output failures
-                        last_error = exc
-                        if attempt < 2:
-                            await asyncio.sleep(1 + attempt)
-                raise ValueError(
-                    f"Generation batch {batch_number} failed after 3 attempts: {last_error}"
-                ) from last_error
+                async def request_with_retries(part_count: int, part_number: int) -> list[dict[str, Any]]:
+                    last_error: Exception | None = None
+                    for attempt in range(3):
+                        try:
+                            batch = await self._request_batch(
+                                client,
+                                fields,
+                                examples,
+                                part_count,
+                                part_number,
+                                model,
+                                continuity_profile,
+                            )
+                            if batch:
+                                return batch
+                            raise ValueError("The model returned an empty records array.")
+                        except Exception as exc:  # noqa: BLE001 - retry transient proxy and malformed-output failures
+                            last_error = exc
+                            if attempt < 2:
+                                await asyncio.sleep(1 + attempt)
+                    raise ValueError(
+                        f"Generation batch {part_number} failed after 3 attempts: {last_error}"
+                    ) from last_error
+
+                try:
+                    return await request_with_retries(count, batch_number)
+                except Exception as batch_error:  # noqa: BLE001 - a smaller response may fit the model context
+                    if count <= 1:
+                        raise
+                    left_count = count // 2
+                    right_count = count - left_count
+                    split_records: list[dict[str, Any]] = []
+                    split_errors: list[str] = [str(batch_error)]
+                    for part_index, part_count in enumerate((left_count, right_count), start=1):
+                        try:
+                            split_records.extend(
+                                await request_with_retries(part_count, batch_number * 100 + part_index)
+                            )
+                        except Exception as exc:  # noqa: BLE001 - include both split failures in the final message
+                            split_errors.append(str(exc))
+                    if split_records:
+                        return split_records
+                    raise ValueError("; ".join(split_errors)) from batch_error
 
         def add_records(incoming: list[dict[str, Any]]) -> None:
             previous_count = len(records)
-            for record in incoming:
+            for incoming_record in incoming:
+                record = dict(incoming_record)
                 fingerprint = json.dumps(record, sort_keys=True, ensure_ascii=False, default=str)
                 if fingerprint not in fingerprints:
                     fingerprints.add(fingerprint)
+                    record_index = len(records) + 1
+                    if "number" in field_names:
+                        number = str(record.get("number") or "")
+                        if not number or number in seen_numbers:
+                            prefix = {"incident": "INC", "change_request": "CHG", "sc_request": "REQ"}.get(
+                                table_name, "REC"
+                            )
+                            number = f"{prefix}{1_000_000 + record_index:07d}"
+                            while number in seen_numbers:
+                                record_index += 1
+                                number = f"{prefix}{1_000_000 + record_index:07d}"
+                            record["number"] = number
+                        seen_numbers.add(number)
+                    if "sys_id" in field_names:
+                        sys_id = str(record.get("sys_id") or "")
+                        if not sys_id or sys_id in seen_sys_ids:
+                            sys_id = hashlib.sha256(
+                                f"{checkpoint_signature}:{len(records)}:{fingerprint}".encode("utf-8")
+                            ).hexdigest()[:32]
+                            record["sys_id"] = sys_id
+                        seen_sys_ids.add(sys_id)
                     records.append(record)
                     if len(records) >= requested:
                         break
             if len(records) > previous_count:
                 # Save after every successful chunk so an interrupted generation can resume.
-                self._save_checkpoint(records, checkpoint_signature)
+                checkpoint_location = self._save_checkpoint(records, checkpoint_signature)
+                checkpoint_status = " and checkpointed" if checkpoint_location else ""
+                self.status = f"Generated{checkpoint_status} {len(records)}/{requested} records"
 
         batch_errors: list[str] = []
         if self.maintain_continuity:
@@ -813,7 +931,8 @@ class SyntheticDatasetGenerator(Component):
                     break
 
         retry_number = len(batch_counts) + 1
-        for _ in range(3):
+        max_fill_attempts = min(max(int(self.max_fill_attempts), 1), 100)
+        for _ in range(max_fill_attempts):
             remaining = requested - len(records)
             if remaining <= 0:
                 break

@@ -80,10 +80,18 @@ def validate_flow(path: Path) -> None:
     assert "Save after every successful chunk" in generator_code
     assert "tempfile.gettempdir()" in generator_code
     assert "storage restrictions must not invalidate generated data" in generator_code
+    assert "Reference Examples per Call" in generator_code
+    assert 'kwargs["max_tokens"]' in generator_code
+    assert "a smaller response may fit the model context" in generator_code
+    assert "max_fill_attempts" in generator_code
 
     if "comparison" in path.name:
-        assert generator_template["record_count"]["value"] == 10
-        assert holdout["data"]["node"]["template"]["sample_size"]["value"] == 10
+        assert generator_template["record_count"]["value"] == 100
+        assert generator_template["batch_size"]["value"] == 5
+        assert generator_template["max_concurrency"]["value"] == 1
+        assert generator_template["reference_examples_per_call"]["value"] == 3
+        assert generator_template["max_fill_attempts"]["value"] == 20
+        assert holdout["data"]["node"]["template"]["sample_size"]["value"] == 30
         assert types.count("SaveToFile") == 8
         assert types.count("ExperimentRunCollector") == 1
         run_after_edges = [

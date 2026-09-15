@@ -212,9 +212,15 @@ def artifact(name: str, description: str, nodes: list[dict[str, Any]], edges: li
 
 def configure_shared(generator: dict[str, Any], holdout: dict[str, Any]) -> None:
     set_value(generator, "schema_preset", "Incident")
-    set_value(generator, "record_count", 10)
+    set_value(generator, "record_count", 100)
+    set_value(generator, "batch_size", 5)
+    set_value(generator, "max_concurrency", 1)
+    set_value(generator, "reference_examples_per_call", 3)
+    set_value(generator, "continuity_sample_size", 2)
+    set_value(generator, "max_output_tokens", 4096)
+    set_value(generator, "max_fill_attempts", 20)
     set_value(generator, "dry_run", True)
-    set_value(holdout, "sample_size", 10)
+    set_value(holdout, "sample_size", 30)
     set_value(holdout, "fields_to_hide", "category,subcategory,assignment_group,resolution_notes,close_code")
     set_value(
         holdout,
