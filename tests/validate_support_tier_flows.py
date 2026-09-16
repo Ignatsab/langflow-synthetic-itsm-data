@@ -82,7 +82,8 @@ def validate_flow(path: Path) -> None:
     assert "storage restrictions must not invalidate generated data" in generator_code
     assert "Reference Examples per Call" in generator_code
     assert 'kwargs["max_tokens"]' in generator_code
-    assert "a smaller response may fit the model context" in generator_code
+    assert "recursively reduce oversized responses" in generator_code
+    assert "_synthetic_result_task" in generator_code
     assert "max_fill_attempts" in generator_code
 
     if "comparison" in path.name:

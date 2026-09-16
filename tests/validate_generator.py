@@ -24,7 +24,7 @@ def main() -> None:
     assert template["template"]["test_goal"]["advanced"] is False
     assert template["template"]["dataset_context"]["advanced"] is False
     assert template["template"]["scenario_guidance"]["advanced"] is False
-    assert template["template"]["batch_size"]["value"] == 10
+    assert template["template"]["batch_size"]["value"] == 5
     assert template["template"]["maintain_continuity"]["value"] is True
     assert template["template"]["model_name"]["value"] == "gpt-oss-120b"
     assert template["template"]["base_url"]["load_from_db"] is False
@@ -75,6 +75,7 @@ def main() -> None:
 
     generator.schema_preset = "Incident"
     generator.dry_run = False
+    generator.reuse_checkpoint = False
     generator.base_url = "http://example.invalid/v1"
     generator.api_key = "test-key"
     generator.model_name = "gpt-oss-120b"
@@ -108,6 +109,62 @@ def main() -> None:
     assert calls[2][2]["generated_so_far"] == 20
     assert result["continuity_profile"]["generated_so_far"] == 25
     assert result["continuity_profile"]["latest_record_number"] == "INC0000025"
+
+    generator.record_count = 100
+    calls.clear()
+    result = asyncio.run(generator._generate())
+    assert result["generated_records"] == 100
+    assert len(calls) == 10
+    assert all(call[0] == 10 for call in calls)
+
+    # A size-related failure must split immediately and recursively instead of
+    # retrying the same oversized prompt three times.
+    generator.record_count = 11
+    generator.batch_size = 5
+    split_calls = []
+
+    async def size_limited_request(client, fields, examples, count, batch_number, model, continuity_profile=None):
+        split_calls.append(count)
+        if count > 2:
+            raise ValueError("simulated output truncation")
+        start = len(split_calls) * 100
+        return [
+            {"number": f"INC{start + index:07d}", "short_description": f"case {start + index}"}
+            for index in range(count)
+        ]
+
+    generator._request_batch = size_limited_request
+    result = asyncio.run(generator._generate())
+    assert result["generated_records"] == 11
+    assert split_calls.count(5) == 2
+    assert all(split_calls.count(size) <= 3 for size in {3, 5})
+
+    # Concurrent output resolution must share one in-flight generation task.
+    generator.record_count = 6
+    generator.batch_size = 3
+    shared_calls = 0
+
+    async def shared_request(client, fields, examples, count, batch_number, model, continuity_profile=None):
+        nonlocal shared_calls
+        shared_calls += 1
+        await asyncio.sleep(0)
+        start = shared_calls * 100
+        return [
+            {"number": f"INC{start + index:07d}", "short_description": f"shared {start + index}"}
+            for index in range(count)
+        ]
+
+    generator._request_batch = shared_request
+    for attribute in ("_synthetic_result_cache", "_synthetic_result_task"):
+        if hasattr(generator, attribute):
+            delattr(generator, attribute)
+
+    async def resolve_outputs_together():
+        return await asyncio.gather(generator._result(), generator._result(), generator._result())
+
+    shared_results = asyncio.run(resolve_outputs_together())
+    assert all(item["generated_records"] == 6 for item in shared_results)
+    assert shared_calls == 2
 
     print("Generator validation passed")
 

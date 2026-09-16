@@ -15,6 +15,14 @@ from lfx.io import BoolInput, DropdownInput, FloatInput, IntInput, MultilineInpu
 from lfx.schema import Data, DataFrame, Message
 
 
+class _ResponseTooLargeError(ValueError):
+    """Raised when a model response should be retried as smaller generation chunks."""
+
+
+class _BatchRequestError(RuntimeError):
+    """Raised after transient request retries are exhausted."""
+
+
 DEFAULT_INCIDENT_FIELDS = json.dumps(
     [
         {"name": "sys_id", "type": "string", "description": "Unique fictional 32-character lowercase hexadecimal ID."},
@@ -743,12 +751,39 @@ class SyntheticDatasetGenerator(Component):
                     kwargs.pop("max_tokens")
                     continue
                 raise
-        content = response.choices[0].message.content
+        choice = response.choices[0]
+        finish_reason = str(getattr(choice, "finish_reason", "") or "")
+        usage = getattr(response, "usage", None)
+        diagnostic = {
+            "batch": batch_number,
+            "requested": count,
+            "finish_reason": finish_reason or "unknown",
+            "completion_tokens": getattr(usage, "completion_tokens", None),
+        }
+        self._generation_diagnostics = [
+            *getattr(self, "_generation_diagnostics", []),
+            diagnostic,
+        ][-100:]
+        if finish_reason in {"length", "max_tokens"}:
+            raise _ResponseTooLargeError(
+                f"Batch {batch_number} reached the model output limit while requesting {count} records"
+            )
+        content = choice.message.content
         if not isinstance(content, str) or not content.strip():
             raise ValueError("The model returned an empty response.")
-        return self._parse_response(content)
+        try:
+            records = self._parse_response(content)
+        except (ValueError, json.JSONDecodeError) as exc:
+            # Malformed JSON is usually a truncated response. Retrying the identical
+            # request wastes time; the caller will immediately split the chunk.
+            raise _ResponseTooLargeError(
+                f"Batch {batch_number} returned incomplete or malformed JSON for {count} records: {exc}"
+            ) from exc
+        diagnostic["returned"] = len(records)
+        return records
 
     async def _generate(self) -> dict[str, Any]:
+        self._generation_diagnostics = []
         table_name, _ = self._table_config()
         fields = self._parse_fields()
         examples = self._parse_reference_examples()
@@ -842,33 +877,44 @@ class SyntheticDatasetGenerator(Component):
                             if batch:
                                 return batch
                             raise ValueError("The model returned an empty records array.")
+                        except (_ResponseTooLargeError, ValueError):
+                            # Empty, malformed, and length-limited responses are
+                            # deterministic for the same prompt size. Split now.
+                            raise
                         except Exception as exc:  # noqa: BLE001 - retry transient proxy and malformed-output failures
                             last_error = exc
                             if attempt < 2:
                                 await asyncio.sleep(1 + attempt)
-                    raise ValueError(
+                    raise _BatchRequestError(
                         f"Generation batch {part_number} failed after 3 attempts: {last_error}"
                     ) from last_error
 
-                try:
-                    return await request_with_retries(count, batch_number)
-                except Exception as batch_error:  # noqa: BLE001 - a smaller response may fit the model context
-                    if count <= 1:
+                async def request_or_split(part_count: int, part_number: int) -> list[dict[str, Any]]:
+                    try:
+                        return await request_with_retries(part_count, part_number)
+                    except _BatchRequestError:
+                        # A smaller payload does not fix an unavailable endpoint,
+                        # authentication failure, or exhausted transport retries.
                         raise
-                    left_count = count // 2
-                    right_count = count - left_count
-                    split_records: list[dict[str, Any]] = []
-                    split_errors: list[str] = [str(batch_error)]
-                    for part_index, part_count in enumerate((left_count, right_count), start=1):
-                        try:
-                            split_records.extend(
-                                await request_with_retries(part_count, batch_number * 100 + part_index)
-                            )
-                        except Exception as exc:  # noqa: BLE001 - include both split failures in the final message
-                            split_errors.append(str(exc))
-                    if split_records:
-                        return split_records
-                    raise ValueError("; ".join(split_errors)) from batch_error
+                    except Exception as batch_error:  # noqa: BLE001 - recursively reduce oversized responses
+                        if part_count <= 1:
+                            raise
+                        left_count = part_count // 2
+                        right_count = part_count - left_count
+                        split_records: list[dict[str, Any]] = []
+                        split_errors: list[str] = []
+                        for part_index, child_count in enumerate((left_count, right_count), start=1):
+                            try:
+                                split_records.extend(
+                                    await request_or_split(child_count, part_number * 10 + part_index)
+                                )
+                            except Exception as exc:  # noqa: BLE001 - preserve any successful sibling chunk
+                                split_errors.append(str(exc))
+                        if split_records:
+                            return split_records
+                        raise ValueError("; ".join([str(batch_error), *split_errors])) from batch_error
+
+                return await request_or_split(count, batch_number)
 
         def add_records(incoming: list[dict[str, Any]]) -> None:
             previous_count = len(records)
@@ -962,6 +1008,8 @@ class SyntheticDatasetGenerator(Component):
             "reference_example_count": len(examples),
             "batch_size": batch_size,
             "generation_calls": retry_number - 1,
+            "actual_llm_responses": len(self._generation_diagnostics),
+            "generation_diagnostics": self._generation_diagnostics,
             "maintain_continuity": bool(self.maintain_continuity),
             "continuity_profile": self._continuity_profile(records),
             "records": records,
@@ -972,9 +1020,22 @@ class SyntheticDatasetGenerator(Component):
 
     async def _result(self) -> dict[str, Any]:
         cached = getattr(self, "_synthetic_result_cache", None)
-        if cached is None:
-            cached = await self._generate()
+        if cached is not None:
+            return cached
+        # Langflow may resolve several connected outputs concurrently. A plain
+        # result cache is racy and can start one complete generation per output.
+        # Keep one in-flight task so every output shares the same LLM work.
+        task = getattr(self, "_synthetic_result_task", None)
+        if task is None:
+            task = asyncio.create_task(self._generate())
+            self._synthetic_result_task = task
+        try:
+            cached = await task
             self._synthetic_result_cache = cached
+        except Exception:
+            if getattr(self, "_synthetic_result_task", None) is task:
+                delattr(self, "_synthetic_result_task")
+            raise
         return cached
 
     async def build_dataframe(self) -> DataFrame:
@@ -1009,6 +1070,7 @@ class SyntheticDatasetGenerator(Component):
             text = (
                 f"{source} {result['generated_records']} synthetic records for table '{result['table_name']}' "
                 f"in batches of up to {result['batch_size']}{continuity}. "
+                f"The endpoint returned {result.get('actual_llm_responses', result['generation_calls'])} LLM responses. "
                 f"The dataset has {result['field_count']} fields and used {result['reference_example_count']} sanitized reference examples. "
                 f"Checkpoint: {result.get('checkpoint_path') or 'not saved'}."
             )
