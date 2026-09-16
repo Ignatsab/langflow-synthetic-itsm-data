@@ -297,8 +297,8 @@ class SyntheticDatasetGenerator(Component):
         IntInput(
             name="batch_size",
             display_name="Records per Generation Call",
-            value=5,
-            info="The component loops until Number of Records is reached. Use 3-5 for a small-context model.",
+            value=1,
+            info="Safe mode: generate one record per LLM call and checkpoint it immediately before continuing.",
         ),
         BoolInput(
             name="maintain_continuity",
@@ -517,7 +517,8 @@ class SyntheticDatasetGenerator(Component):
         path = self._checkpoint_path()
         try:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(
+            temporary_path = path.with_suffix(path.suffix + ".tmp")
+            temporary_path.write_text(
                 json.dumps(
                     {"input_signature": signature, "record_count": len(records), "records": records},
                     indent=2,
@@ -526,6 +527,7 @@ class SyntheticDatasetGenerator(Component):
                 ),
                 encoding="utf-8",
             )
+            temporary_path.replace(path)
             return str(path)
         except OSError as exc:
             # A checkpoint is a recovery aid; storage restrictions must not invalidate generated data.
@@ -780,7 +782,10 @@ class SyntheticDatasetGenerator(Component):
                 f"Batch {batch_number} returned incomplete or malformed JSON for {count} records: {exc}"
             ) from exc
         diagnostic["returned"] = len(records)
-        return records
+        # Never accept more rows than this call requested. In the default
+        # line-by-line mode, one response therefore contributes exactly one
+        # checkpointable record even if the model ignores the requested count.
+        return records[:count]
 
     async def _generate(self) -> dict[str, Any]:
         self._generation_diagnostics = []
@@ -993,7 +998,7 @@ class SyntheticDatasetGenerator(Component):
             raise ValueError(
                 f"The model produced {len(records)} of {requested} unique valid records after chunk retries. "
                 f"Recent batch errors: {error_summary or 'the model repeatedly returned too few unique records'}. "
-                "Try Records per Generation Call = 5, Concurrent LLM Calls = 1, or a smaller Number of Records."
+                "Keep Records per Generation Call = 1 and rerun with the same checkpoint name to resume."
             )
         records = records[:requested]
         checkpoint_path = self._save_checkpoint(records, checkpoint_signature)

@@ -17,7 +17,7 @@
 3. Choose **Incident**, **Change Request**, or **Service Request** from **Record Type**. Incident is selected by default, and each option uses its own internal schema.
 4. Leave **Dry Run** enabled and run once. Inspect **Generation Summary** and **Prompt Preview**.
 5. Enter the LLM proxy **Base URL** and **API Key** if they are not configured in the server environment. The model defaults to `gpt-oss-120b` but remains editable.
-6. Disable **Dry Run**, choose the total record count, and keep **Records per Generation Call** at `5` for a smaller-context model. The component loops until it reaches the total.
+6. Disable **Dry Run**, choose the total record count, and keep **Records per Generation Call** at `1`. The component generates and checkpoints one row before requesting the next.
 7. Use **Dataset (DataFrame)** for tabular downstream processing or **Dataset (JSON)** for agent/evaluation flows.
 
 The predefined field JSON, descriptions, test goal, dataset context, scenario mix, and reference examples remain visible. Changing **Record Type** refreshes the displayed table name and field JSON. Built-in generation uses the protected matching schema; choose **Custom** when you want edits to the table name or fields to take effect.
@@ -59,7 +59,7 @@ Import `servicenow_support_tier_comparison_flow.json` for the fairest experiment
 
 The generator starts in Dry Run. Configure its OpenAI-compatible endpoint, generate the labeled incidents, and keep the Holdout Dataset Builder between the generator and every classifier. In each Batch Run branch, choose any available model provider. Use the same model in all three branches to compare prompts, or different models with the same prompt in the standalone flows to compare models.
 
-The importable comparison flows are configured for **100 generated records** and a **30-ticket evaluation holdout**. For the very first endpoint check, temporarily set **Number of Records** to `10`; after that succeeds, restore it to `100` or increase it further. Keep **Records per Generation Call** at `5` (or reduce it to `3` for a particularly small-context model).
+The importable comparison flows are configured for **100 generated records** and a **30-ticket evaluation holdout**. For the very first endpoint check, temporarily set **Number of Records** to `10`; after that succeeds, restore it to `100` or increase it further. Keep **Records per Generation Call** at `1` so every response is saved before the next request.
 
 ### Run the complete experiment and resume safely
 
@@ -95,19 +95,19 @@ The dashboard preserves `_test_scenario`, `state`, and `priority` from hidden gr
 
 ## Performance tuning
 
-The generator defaults to 5 records per call and loops until **Number of Records** is reached. A 100-record dataset therefore uses 20 successful small generation calls rather than one large prompt. With **Keep Dataset Connected Across Calls** enabled, calls run sequentially and each new call receives only a bounded continuity profile containing earlier distributions, two recent record summaries, and the latest identifier. The full growing dataset is never sent back to the model.
+The generator defaults to one record per call and loops until **Number of Records** is reached. Each accepted answer is checkpointed before the next request begins. A 100-record dataset therefore uses 100 small sequential generation calls, but a timeout or interruption can resume from the last saved row. With **Keep Dataset Connected Across Calls** enabled, each call receives only a bounded continuity profile containing earlier distributions, two recent record summaries, and the latest identifier. The full growing dataset is never sent back to the model.
 
-Five is a per-request chunk size, not a dataset limit. Each call receives at most three rotating reference examples and requests at most 4,096 output tokens. A length-limited or malformed response is split immediately and recursively until its smaller chunks fit; transient network failures are retried without creating a request explosion. Up to 20 recovery batches can fill missing or duplicate records. Concurrent Langflow outputs share one in-flight generation job, so connecting the DataFrame, JSON, summary, and profile outputs does not duplicate the model workload. The support-tier comparison flows also cap the built-in Batch Run classifier at **Max Concurrent Requests = 1** with three request attempts.
+One is a per-request chunk size, not a dataset limit. Each call receives at most three rotating reference examples and requests at most 4,096 output tokens. The component accepts at most the requested number of rows, so a model that returns extra records cannot bypass line-by-line checkpointing. Transient network failures are retried without creating a request explosion, and up to 20 recovery calls can replace missing or duplicate records. Concurrent Langflow outputs share one in-flight generation job, so connecting the DataFrame, JSON, summary, and profile outputs does not duplicate the model workload.
 
 The **Dataset (JSON)** output includes `generation_diagnostics`. Each successful endpoint response records the requested row count, returned row count, finish reason, and completion-token count when the proxy supplies it. Repeated `finish_reason: "length"` means the per-call output is too large; lower **Records per Generation Call** or raise **Maximum Output Tokens per Call** if the endpoint supports it. If calls finish normally but return fewer rows, inspect duplicate rates and simplify long text fields. If no response diagnostic appears, investigate endpoint availability, authentication, proxy logs, and outer Langflow or gateway timeouts.
 
 - Keep continuity enabled when relationships and stable categories/groups matter. Disable it when maximum generation speed matters more than cross-batch consistency.
 - **Concurrent LLM Calls** is used only when continuity is disabled; try `2` to `4` only after checking server capacity.
 - If the proxy serializes requests or runs close to its memory limit, set concurrency to `1`.
-- Increase **Records per Generation Call** only after a stable 100-row run; reduce it from `5` to `3` if responses truncate or contain malformed JSON.
+- Keep **Records per Generation Call** at `1` for minimum endpoint load. Increase it only after a stable run if generation speed becomes more important than isolation and immediate per-row checkpointing.
 - Generate only the fields needed for the test. Long descriptions and many output columns dominate generation time.
 - For quick iterations, generate 10-20 source tickets and set the holdout sample to 5. Scale up only for final evaluation.
-- For 100-500 source tickets, keep **Records per Generation Call** at `3` or `5`, **Keep Dataset Connected Across Calls** enabled, and **Concurrent LLM Calls** at `1`. Set **Tickets to Test** independently; generating 500 tickets does not require classifying all 500 in one experiment.
+- For 100-500 source tickets in safe mode, keep **Records per Generation Call** at `1`, **Keep Dataset Connected Across Calls** enabled, and **Concurrent LLM Calls** at `1`. Rerun with the same checkpoint name after an interruption to continue from the last saved row.
 - After a stable run, increase **Max Concurrent Requests** on each Batch Run classifier from `1` to `2` only if the endpoint has spare capacity.
 - The classification agent also batches tickets and supports concurrent calls independently.
 - For a slow local classifier, start with **Tickets per LLM Call = 1-3** and **Concurrent LLM Calls = 1**. The defaults are 5 and 1.

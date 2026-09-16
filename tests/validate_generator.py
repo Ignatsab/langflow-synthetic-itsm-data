@@ -24,7 +24,7 @@ def main() -> None:
     assert template["template"]["test_goal"]["advanced"] is False
     assert template["template"]["dataset_context"]["advanced"] is False
     assert template["template"]["scenario_guidance"]["advanced"] is False
-    assert template["template"]["batch_size"]["value"] == 5
+    assert template["template"]["batch_size"]["value"] == 1
     assert template["template"]["maintain_continuity"]["value"] is True
     assert template["template"]["model_name"]["value"] == "gpt-oss-120b"
     assert template["template"]["base_url"]["load_from_db"] is False

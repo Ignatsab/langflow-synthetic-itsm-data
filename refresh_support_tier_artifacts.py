@@ -99,6 +99,10 @@ def sync_node(node: dict[str, Any], prompts: dict[str, str], flow_name: str) -> 
     if node_type == "SyntheticDatasetGenerator":
         source = ROOT / "synthetic_dataset_generator_component.py"
         template["code"]["value"] = source.read_text(encoding="utf-8")
+        template["batch_size"]["value"] = named_input_default(source, "batch_size")
+        template["batch_size"]["info"] = (
+            "Safe mode: generate one record per LLM call and checkpoint it immediately before continuing."
+        )
         template["field_definitions"]["value"] = json.dumps(
             assignment_value(source, "DEFAULT_INCIDENT_FIELDS"), indent=2
         )

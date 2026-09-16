@@ -88,7 +88,7 @@ def validate_flow(path: Path) -> None:
 
     if "comparison" in path.name:
         assert generator_template["record_count"]["value"] == 100
-        assert generator_template["batch_size"]["value"] == 5
+        assert generator_template["batch_size"]["value"] == 1
         assert generator_template["max_concurrency"]["value"] == 1
         assert generator_template["reference_examples_per_call"]["value"] == 3
         assert generator_template["max_fill_attempts"]["value"] == 20
