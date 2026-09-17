@@ -1,0 +1,22 @@
+{
+  "schema_preset": "Custom",
+  "table_name": "automatic_rule_provisioning_test_case",
+  "test_goal": "Evaluate whether an automation agent converts an approved server-to-application-pool membership event into least-privilege, idempotent Illumio and firewall policy; repairs partial state; and safely blocks, defers, or escalates invalid and conflicting requests.",
+  "dataset_context": "Use one fictional enterprise. Each record is a self-contained test case. A server is added to an application pool, whose approved_connectivity_intents are the sole source of allowed flows. The agent may only provision exact protocol/port combinations from active approved intents. It must inspect existing_state, avoid duplicates using canonical rule equivalence and idempotency_key, and never override an explicit deny. Illumio rules use application/environment/role/location labels; firewall rules use server IPs or managed address groups and named zones. For CREATE_BOTH, treat the change as one transaction and report both platform actions. Fields beginning with _expected_ are hidden ground truth and must be mutually consistent with visible inputs.",
+  "scenario_guidance": "Generate about 40% valid CREATE_BOTH cases, 15% already-provisioned NO_CHANGE cases, 15% partial-state repair cases, 15% BLOCK cases for missing or unauthorized data, 10% DEFER cases for recoverable dependencies, and 5% MANUAL_REVIEW cases for conflicts such as explicit denies. Include single-flow and multi-flow applications, inbound and outbound intent, production and non-production, duplicate events, disabled intents, missing IPs, offline VENs, and firewall conflicts. Never include real hosts, addresses, credentials, or customer names. Use RFC 5737 documentation IP ranges.",
+  "field_definitions": [
+    {"name": "case_id", "type": "string", "description": "Unique test case ID such as ARP-001."},
+    {"name": "_test_scenario", "type": "string", "description": "One of happy_path, idempotent, partial_state, invalid_input, dependency_failure, conflict, or multi_flow."},
+    {"name": "membership_event", "type": "object", "description": "Trigger with event_id, event_type=SERVER_ADDED_TO_POOL, server_id, pool_id, occurred_at, approved_change_id, and idempotency_key."},
+    {"name": "server", "type": "object", "description": "CMDB facts: server_id, hostname, ip_address or null, environment, location, network_zone, owner, illumio_workload_id, ven_state, and cmdb_status."},
+    {"name": "application_pool", "type": "object", "description": "Pool facts: pool_id, application, environment, role, owner, lifecycle_state, security_tier, and Illumio labels."},
+    {"name": "approved_connectivity_intents", "type": "array[object]", "description": "Approved desired flows with intent_id, status, direction, source, destination, protocol, port, source_zone, destination_zone, and business_purpose."},
+    {"name": "existing_state", "type": "object", "description": "Existing illumio_rules and firewall_rules relevant to this event, including explicit denies and equivalent rules."},
+    {"name": "_expected_decision", "type": "string", "description": "One of CREATE_BOTH, CREATE_ILLUMIO_ONLY, CREATE_FIREWALL_ONLY, NO_CHANGE, BLOCK, DEFER, or MANUAL_REVIEW."},
+    {"name": "_expected_actions", "type": "array[string]", "description": "Ordered platform actions expected from the automation."},
+    {"name": "_expected_illumio_rules", "type": "array[object]", "description": "Exact normalized Illumio allow rules to create; empty if none."},
+    {"name": "_expected_firewall_rules", "type": "array[object]", "description": "Exact normalized firewall allow rules to create; empty if none."},
+    {"name": "_expected_reason_code", "type": "string", "description": "Stable categorical reason explaining the decision."}
+  ],
+  "reference_examples_file": "provisioning_test_cases.json"
+}
