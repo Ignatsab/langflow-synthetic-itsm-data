@@ -1,0 +1,1049 @@
+{
+  "metadata": {
+    "dataset_name": "autosys_sod_regional_report_dependencies",
+    "generated_at": "2026-09-21T00:00:00Z",
+    "timezone_for_schedules": "UTC",
+    "box_semantics": "A BOX is a logical container and executes no script. It completes only after all terminal child CMD jobs reach SUCCESS.",
+    "delivery_semantics": "Regional report delivery occurs when the configured PUBLISH_REPORT CMD succeeds; BOX completion may occur later after archive and notification jobs.",
+    "dependency_semantics": "A CMD becomes eligible only when every dependency condition is satisfied. Independent eligible CMD jobs may run in parallel."
+  },
+  "calendars": [
+    {
+      "calendar_name": "WEEKDAYS",
+      "included_weekdays": [
+        "MON",
+        "TUE",
+        "WED",
+        "THU",
+        "FRI"
+      ],
+      "regional_holidays_by_region": {
+        "APAC": [
+          "2026-08-14"
+        ],
+        "EMEA": [
+          "2026-08-17"
+        ],
+        "AMER": [
+          "2026-09-07"
+        ]
+      },
+      "run_on_regional_holidays": true
+    }
+  ],
+  "jobs": [
+    {
+      "job_name": "BOX_SOD_APAC_REPORTS",
+      "job_type": "BOX",
+      "description": "Orchestrates APAC start-of-day regional report delivery",
+      "region": "APAC",
+      "timezone": "Asia/Singapore",
+      "run_calendar": "WEEKDAYS",
+      "scheduled_time_utc": "00:30",
+      "delivery_sla_minutes": 180,
+      "delivery_milestone_job": "CMD_APAC_PUBLISH_REPORT",
+      "dependencies": [],
+      "child_jobs": [
+        "CMD_APAC_INIT",
+        "CMD_APAC_EXTRACT_TRANSACTIONS",
+        "CMD_APAC_EXTRACT_REFERENCE",
+        "CMD_APAC_EXTRACT_CUSTOMERS",
+        "CMD_APAC_VALIDATE_TRANSACTIONS",
+        "CMD_APAC_ENRICH_DATA",
+        "CMD_APAC_BUILD_REPORT",
+        "CMD_APAC_PUBLISH_REPORT",
+        "CMD_APAC_ARCHIVE",
+        "CMD_APAC_SEND_STATUS"
+      ],
+      "command": null,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_INIT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Initialize business date and regional workspace",
+      "region": "APAC",
+      "dependencies": [],
+      "command": "/opt/aps/sod/init.sh --region apac",
+      "base_duration_minutes": 4,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_EXTRACT_TRANSACTIONS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Extract regional transaction data",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_transactions.sh --region apac",
+      "base_duration_minutes": 36,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_EXTRACT_REFERENCE",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Extract reference and exchange-rate data",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_reference.sh --region apac",
+      "base_duration_minutes": 12,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_EXTRACT_CUSTOMERS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Extract regional customer master data",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_customers.sh --region apac",
+      "base_duration_minutes": 20,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_VALIDATE_TRANSACTIONS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Validate transaction completeness and control totals",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_EXTRACT_TRANSACTIONS",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/validate_transactions.sh --region apac",
+      "base_duration_minutes": 16,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_ENRICH_DATA",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Join validated transactions with reference and customer data",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_VALIDATE_TRANSACTIONS",
+          "condition": "SUCCESS"
+        },
+        {
+          "job_name": "CMD_APAC_EXTRACT_REFERENCE",
+          "condition": "SUCCESS"
+        },
+        {
+          "job_name": "CMD_APAC_EXTRACT_CUSTOMERS",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/enrich_data.sh --region apac",
+      "base_duration_minutes": 25,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_BUILD_REPORT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Build the regional SOD report package",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_ENRICH_DATA",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/build_report.sh --region apac",
+      "base_duration_minutes": 32,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_PUBLISH_REPORT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Publish the regional reports to the delivery location",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_BUILD_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/publish_report.sh --region apac",
+      "base_duration_minutes": 8,
+      "volume_sensitive": false,
+      "delivery_milestone": true,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_ARCHIVE",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Archive inputs, outputs, and execution evidence",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_PUBLISH_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/archive.sh --region apac",
+      "base_duration_minutes": 10,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": true,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "CMD_APAC_SEND_STATUS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_APAC_REPORTS",
+      "description": "Generate and send the regional completion notification",
+      "region": "APAC",
+      "dependencies": [
+        {
+          "job_name": "CMD_APAC_PUBLISH_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/send_status.sh --region apac",
+      "base_duration_minutes": 3,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": true,
+      "owner_group": "regional-reporting-apac"
+    },
+    {
+      "job_name": "BOX_SOD_EMEA_REPORTS",
+      "job_type": "BOX",
+      "description": "Orchestrates EMEA start-of-day regional report delivery",
+      "region": "EMEA",
+      "timezone": "Europe/Paris",
+      "run_calendar": "WEEKDAYS",
+      "scheduled_time_utc": "04:30",
+      "delivery_sla_minutes": 180,
+      "delivery_milestone_job": "CMD_EMEA_PUBLISH_REPORT",
+      "dependencies": [],
+      "child_jobs": [
+        "CMD_EMEA_INIT",
+        "CMD_EMEA_EXTRACT_TRANSACTIONS",
+        "CMD_EMEA_EXTRACT_REFERENCE",
+        "CMD_EMEA_EXTRACT_CUSTOMERS",
+        "CMD_EMEA_VALIDATE_TRANSACTIONS",
+        "CMD_EMEA_ENRICH_DATA",
+        "CMD_EMEA_BUILD_REPORT",
+        "CMD_EMEA_PUBLISH_REPORT",
+        "CMD_EMEA_ARCHIVE",
+        "CMD_EMEA_SEND_STATUS"
+      ],
+      "command": null,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_INIT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Initialize business date and regional workspace",
+      "region": "EMEA",
+      "dependencies": [],
+      "command": "/opt/aps/sod/init.sh --region emea",
+      "base_duration_minutes": 4,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_EXTRACT_TRANSACTIONS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Extract regional transaction data",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_transactions.sh --region emea",
+      "base_duration_minutes": 36,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_EXTRACT_REFERENCE",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Extract reference and exchange-rate data",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_reference.sh --region emea",
+      "base_duration_minutes": 12,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_EXTRACT_CUSTOMERS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Extract regional customer master data",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_customers.sh --region emea",
+      "base_duration_minutes": 20,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_VALIDATE_TRANSACTIONS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Validate transaction completeness and control totals",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_EXTRACT_TRANSACTIONS",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/validate_transactions.sh --region emea",
+      "base_duration_minutes": 16,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_ENRICH_DATA",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Join validated transactions with reference and customer data",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_VALIDATE_TRANSACTIONS",
+          "condition": "SUCCESS"
+        },
+        {
+          "job_name": "CMD_EMEA_EXTRACT_REFERENCE",
+          "condition": "SUCCESS"
+        },
+        {
+          "job_name": "CMD_EMEA_EXTRACT_CUSTOMERS",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/enrich_data.sh --region emea",
+      "base_duration_minutes": 25,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_BUILD_REPORT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Build the regional SOD report package",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_ENRICH_DATA",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/build_report.sh --region emea",
+      "base_duration_minutes": 32,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_PUBLISH_REPORT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Publish the regional reports to the delivery location",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_BUILD_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/publish_report.sh --region emea",
+      "base_duration_minutes": 8,
+      "volume_sensitive": false,
+      "delivery_milestone": true,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_ARCHIVE",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Archive inputs, outputs, and execution evidence",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_PUBLISH_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/archive.sh --region emea",
+      "base_duration_minutes": 10,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": true,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "CMD_EMEA_SEND_STATUS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_EMEA_REPORTS",
+      "description": "Generate and send the regional completion notification",
+      "region": "EMEA",
+      "dependencies": [
+        {
+          "job_name": "CMD_EMEA_PUBLISH_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/send_status.sh --region emea",
+      "base_duration_minutes": 3,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": true,
+      "owner_group": "regional-reporting-emea"
+    },
+    {
+      "job_name": "BOX_SOD_AMER_REPORTS",
+      "job_type": "BOX",
+      "description": "Orchestrates AMER start-of-day regional report delivery",
+      "region": "AMER",
+      "timezone": "America/New_York",
+      "run_calendar": "WEEKDAYS",
+      "scheduled_time_utc": "11:30",
+      "delivery_sla_minutes": 200,
+      "delivery_milestone_job": "CMD_AMER_PUBLISH_REPORT",
+      "dependencies": [],
+      "child_jobs": [
+        "CMD_AMER_INIT",
+        "CMD_AMER_EXTRACT_TRANSACTIONS",
+        "CMD_AMER_EXTRACT_REFERENCE",
+        "CMD_AMER_EXTRACT_CUSTOMERS",
+        "CMD_AMER_VALIDATE_TRANSACTIONS",
+        "CMD_AMER_ENRICH_DATA",
+        "CMD_AMER_BUILD_REPORT",
+        "CMD_AMER_PUBLISH_REPORT",
+        "CMD_AMER_ARCHIVE",
+        "CMD_AMER_SEND_STATUS"
+      ],
+      "command": null,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_INIT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Initialize business date and regional workspace",
+      "region": "AMER",
+      "dependencies": [],
+      "command": "/opt/aps/sod/init.sh --region amer",
+      "base_duration_minutes": 4,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_EXTRACT_TRANSACTIONS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Extract regional transaction data",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_transactions.sh --region amer",
+      "base_duration_minutes": 36,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_EXTRACT_REFERENCE",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Extract reference and exchange-rate data",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_reference.sh --region amer",
+      "base_duration_minutes": 12,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_EXTRACT_CUSTOMERS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Extract regional customer master data",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_INIT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/extract_customers.sh --region amer",
+      "base_duration_minutes": 20,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_VALIDATE_TRANSACTIONS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Validate transaction completeness and control totals",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_EXTRACT_TRANSACTIONS",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/validate_transactions.sh --region amer",
+      "base_duration_minutes": 16,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_ENRICH_DATA",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Join validated transactions with reference and customer data",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_VALIDATE_TRANSACTIONS",
+          "condition": "SUCCESS"
+        },
+        {
+          "job_name": "CMD_AMER_EXTRACT_REFERENCE",
+          "condition": "SUCCESS"
+        },
+        {
+          "job_name": "CMD_AMER_EXTRACT_CUSTOMERS",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/enrich_data.sh --region amer",
+      "base_duration_minutes": 25,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_BUILD_REPORT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Build the regional SOD report package",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_ENRICH_DATA",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/build_report.sh --region amer",
+      "base_duration_minutes": 32,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_PUBLISH_REPORT",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Publish the regional reports to the delivery location",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_BUILD_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/publish_report.sh --region amer",
+      "base_duration_minutes": 8,
+      "volume_sensitive": false,
+      "delivery_milestone": true,
+      "terminal_for_box": false,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_ARCHIVE",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Archive inputs, outputs, and execution evidence",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_PUBLISH_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/archive.sh --region amer",
+      "base_duration_minutes": 10,
+      "volume_sensitive": true,
+      "delivery_milestone": false,
+      "terminal_for_box": true,
+      "owner_group": "regional-reporting-amer"
+    },
+    {
+      "job_name": "CMD_AMER_SEND_STATUS",
+      "job_type": "CMD",
+      "box_name": "BOX_SOD_AMER_REPORTS",
+      "description": "Generate and send the regional completion notification",
+      "region": "AMER",
+      "dependencies": [
+        {
+          "job_name": "CMD_AMER_PUBLISH_REPORT",
+          "condition": "SUCCESS"
+        }
+      ],
+      "command": "/opt/aps/sod/send_status.sh --region amer",
+      "base_duration_minutes": 3,
+      "volume_sensitive": false,
+      "delivery_milestone": false,
+      "terminal_for_box": true,
+      "owner_group": "regional-reporting-amer"
+    }
+  ],
+  "current_sod_snapshot": {
+    "business_date": "2026-09-21",
+    "as_of": "2026-09-21T06:15:00Z",
+    "job_states": [
+      {
+        "job_name": "BOX_SOD_APAC_REPORTS",
+        "job_type": "BOX",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T00:30:00Z",
+        "actual_end": "2026-09-21T02:50:00Z",
+        "elapsed_seconds": 8400,
+        "latest_status_message": "All child CMD jobs completed; report delivered at 02:38 UTC."
+      },
+      {
+        "job_name": "CMD_APAC_INIT",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T00:30:00Z",
+        "actual_end": "2026-09-21T00:34:00Z",
+        "elapsed_seconds": 240,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_EXTRACT_TRANSACTIONS",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T00:35:00Z",
+        "actual_end": "2026-09-21T01:12:00Z",
+        "elapsed_seconds": 2220,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_EXTRACT_REFERENCE",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T00:35:00Z",
+        "actual_end": "2026-09-21T00:48:00Z",
+        "elapsed_seconds": 780,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_EXTRACT_CUSTOMERS",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T00:35:00Z",
+        "actual_end": "2026-09-21T00:57:00Z",
+        "elapsed_seconds": 1320,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_VALIDATE_TRANSACTIONS",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T01:13:00Z",
+        "actual_end": "2026-09-21T01:28:00Z",
+        "elapsed_seconds": 900,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_ENRICH_DATA",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T01:29:00Z",
+        "actual_end": "2026-09-21T01:55:00Z",
+        "elapsed_seconds": 1560,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_BUILD_REPORT",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T01:56:00Z",
+        "actual_end": "2026-09-21T02:29:00Z",
+        "elapsed_seconds": 1980,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_PUBLISH_REPORT",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T02:30:00Z",
+        "actual_end": "2026-09-21T02:38:00Z",
+        "elapsed_seconds": 480,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_ARCHIVE",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T02:39:00Z",
+        "actual_end": "2026-09-21T02:50:00Z",
+        "elapsed_seconds": 660,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_APAC_SEND_STATUS",
+        "job_type": "CMD",
+        "region": "APAC",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T02:39:00Z",
+        "actual_end": "2026-09-21T02:42:00Z",
+        "elapsed_seconds": 180,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "BOX_SOD_EMEA_REPORTS",
+        "job_type": "BOX",
+        "region": "EMEA",
+        "status": "RUNNING",
+        "actual_start": "2026-09-21T04:30:00Z",
+        "actual_end": null,
+        "elapsed_seconds": 6300,
+        "latest_status_message": "Waiting for the long-running transaction extract."
+      },
+      {
+        "job_name": "CMD_EMEA_INIT",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T04:30:00Z",
+        "actual_end": "2026-09-21T04:35:00Z",
+        "elapsed_seconds": 300,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_EMEA_EXTRACT_TRANSACTIONS",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "RUNNING",
+        "actual_start": "2026-09-21T04:36:00Z",
+        "actual_end": null,
+        "elapsed_seconds": 5940,
+        "latest_status_message": "Processing elevated input volume; no failure reported."
+      },
+      {
+        "job_name": "CMD_EMEA_EXTRACT_REFERENCE",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T04:36:00Z",
+        "actual_end": "2026-09-21T04:49:00Z",
+        "elapsed_seconds": 780,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_EMEA_EXTRACT_CUSTOMERS",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "SUCCESS",
+        "actual_start": "2026-09-21T04:36:00Z",
+        "actual_end": "2026-09-21T04:58:00Z",
+        "elapsed_seconds": 1320,
+        "latest_status_message": "Completed normally."
+      },
+      {
+        "job_name": "CMD_EMEA_VALIDATE_TRANSACTIONS",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "WAITING",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Waiting for predecessor success."
+      },
+      {
+        "job_name": "CMD_EMEA_ENRICH_DATA",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "WAITING",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Waiting for predecessor success."
+      },
+      {
+        "job_name": "CMD_EMEA_BUILD_REPORT",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "WAITING",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Waiting for predecessor success."
+      },
+      {
+        "job_name": "CMD_EMEA_PUBLISH_REPORT",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "WAITING",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Waiting for predecessor success."
+      },
+      {
+        "job_name": "CMD_EMEA_ARCHIVE",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "WAITING",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Waiting for predecessor success."
+      },
+      {
+        "job_name": "CMD_EMEA_SEND_STATUS",
+        "job_type": "CMD",
+        "region": "EMEA",
+        "status": "WAITING",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Waiting for predecessor success."
+      },
+      {
+        "job_name": "BOX_SOD_AMER_REPORTS",
+        "job_type": "BOX",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Scheduled for 11:30 UTC."
+      },
+      {
+        "job_name": "CMD_AMER_INIT",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_EXTRACT_TRANSACTIONS",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_EXTRACT_REFERENCE",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_EXTRACT_CUSTOMERS",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_VALIDATE_TRANSACTIONS",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_ENRICH_DATA",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_BUILD_REPORT",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_PUBLISH_REPORT",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_ARCHIVE",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      },
+      {
+        "job_name": "CMD_AMER_SEND_STATUS",
+        "job_type": "CMD",
+        "region": "AMER",
+        "status": "NOT_STARTED",
+        "actual_start": null,
+        "actual_end": null,
+        "elapsed_seconds": 0,
+        "latest_status_message": "Regional box has not started."
+      }
+    ],
+    "email_recipients": {
+      "APAC": [
+        "apac-report-ops@example.test"
+      ],
+      "EMEA": [
+        "emea-report-ops@example.test"
+      ],
+      "AMER": [
+        "amer-report-ops@example.test"
+      ],
+      "GLOBAL": [
+        "global-sod-operations@example.test"
+      ]
+    },
+    "status_email_requirements": [
+      "Report each region as complete, running, waiting, not started, failed, or blocked.",
+      "Include actual delivery time when complete and predicted P50/P90 delivery time when incomplete.",
+      "Name the current or blocking CMD job and identify SLA risk.",
+      "Do not report a BOX as complete until all terminal child CMD jobs succeed."
+    ]
+  }
+}
