@@ -1,4 +1,4 @@
-"""Generate deterministic mock AutoSys dependency and historical ETA datasets."""
+"""Generate deterministic mock AutoSys dependency, snapshot, and history datasets."""
 
 from __future__ import annotations
 
@@ -162,7 +162,6 @@ def build_current_snapshot(jobs: list[dict]) -> dict:
 
 
 def build_dependencies_dataset() -> dict:
-    jobs = build_job_catalog()
     return {
         "metadata": {
             "dataset_name": "autosys_sod_regional_report_dependencies",
@@ -175,8 +174,7 @@ def build_dependencies_dataset() -> dict:
         "calendars": [
             {"calendar_name": "WEEKDAYS", "included_weekdays": ["MON", "TUE", "WED", "THU", "FRI"], "regional_holidays_by_region": {region: sorted(day.isoformat() for day in days) for region, days in MOCK_HOLIDAYS.items()}, "run_on_regional_holidays": True}
         ],
-        "jobs": jobs,
-        "current_sod_snapshot": build_current_snapshot(jobs)
+        "jobs": build_job_catalog()
     }
 
 
@@ -308,10 +306,13 @@ def build_historical_dataset() -> dict:
 
 def main() -> None:
     dependencies = build_dependencies_dataset()
+    current_snapshot = build_current_snapshot(dependencies["jobs"])
     history = build_historical_dataset()
     (OUTPUT_DIR / "autosys_job_dependencies.json").write_text(json.dumps(dependencies, indent=2) + "\n", encoding="utf-8")
+    (OUTPUT_DIR / "autosys_current_sod_snapshot.json").write_text(json.dumps(current_snapshot, indent=2) + "\n", encoding="utf-8")
     (OUTPUT_DIR / "autosys_execution_history.json").write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
     print(f"Generated {len(dependencies['jobs'])} job definitions")
+    print(f"Generated {len(current_snapshot['job_states'])} current SOD job states")
     print(f"Generated {len(history['command_runs'])} CMD runs and {len(history['box_runs'])} BOX runs")
 
 

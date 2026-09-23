@@ -4,9 +4,10 @@ This package supports an agent or prediction model that monitors regional start-
 
 ## Files
 
-- `autosys_job_dependencies.json`: static BOX/CMD definitions, dependency DAGs, schedules, SLAs, and a current SOD status snapshot.
+- `autosys_job_dependencies.json`: static BOX/CMD definitions, dependency DAGs, schedules, and SLAs.
+- `autosys_current_sod_snapshot.json`: current-day BOX/CMD states used for live ETA calculation and status-email generation.
 - `autosys_execution_history.json`: historical CMD executions and derived BOX outcomes for model training and ETA backtesting.
-- `generate_mock_data.py`: deterministic generator for both JSON datasets. It uses only the Python standard library and seed `20260921`.
+- `generate_mock_data.py`: deterministic generator for all three JSON datasets. It uses only the Python standard library and seed `20260921`.
 
 ## Execution model
 
@@ -20,14 +21,13 @@ This package supports an agent or prediction model that monitors regional start-
 
 ## Dataset 1: `autosys_job_dependencies.json`
 
-This file is one JSON object with four top-level fields.
+This file is one JSON object with three top-level fields.
 
 | Field | Type | Description |
 |---|---|---|
 | `metadata` | object | Dataset identity and the BOX, delivery, and dependency semantics. |
 | `calendars` | array of objects | Run calendars and regional exclusions. |
 | `jobs` | array of objects | All BOX and CMD definitions for APAC, EMEA, and AMER. |
-| `current_sod_snapshot` | object | Current job states used for live ETA and status-email generation. |
 
 ### `metadata`
 
@@ -68,7 +68,9 @@ CMD-only fields:
 - `delivery_milestone` marks the report-publication CMD.
 - `terminal_for_box` marks jobs that must succeed before the BOX can complete.
 
-### `current_sod_snapshot`
+## Dataset 2: `autosys_current_sod_snapshot.json`
+
+This standalone file represents the live scheduler state at a particular point in the current SOD run. Keeping it separate from the static dependency catalog lets participants update or replace the live state without modifying the job definitions.
 
 | Field | Description |
 |---|---|
@@ -80,7 +82,7 @@ CMD-only fields:
 
 Each `job_states` record contains `job_name`, `job_type`, `region`, `status`, `actual_start`, `actual_end`, `elapsed_seconds`, and `latest_status_message`. Possible live states are `NOT_STARTED`, `WAITING`, `RUNNING`, `SUCCESS`, `FAILED`, or `BLOCKED`.
 
-## Dataset 2: `autosys_execution_history.json`
+## Dataset 3: `autosys_execution_history.json`
 
 This file contains `metadata`, `command_runs`, and `box_runs`.
 
