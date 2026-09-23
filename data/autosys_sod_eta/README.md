@@ -5,7 +5,7 @@ This package supports an agent or prediction model that monitors regional start-
 ## Files
 
 - `autosys_job_dependencies.json`: static BOX/CMD definitions, dependency DAGs, schedules, and SLAs.
-- `autosys_current_sod_snapshot.json`: current-day BOX/CMD states used for live ETA calculation and status-email generation.
+- `autosys_current_sod_snapshot.json`: five daily BOX/CMD status snapshots used for live ETA calculation and status-email generation.
 - `autosys_execution_history.json`: historical CMD executions and derived BOX outcomes for model training and ETA backtesting.
 - `generate_mock_data.py`: deterministic generator for all three JSON datasets. It uses only the Python standard library and seed `20260921`.
 
@@ -70,17 +70,38 @@ CMD-only fields:
 
 ## Dataset 2: `autosys_current_sod_snapshot.json`
 
-This standalone file represents the live scheduler state at a particular point in the current SOD run. Keeping it separate from the static dependency catalog lets participants update or replace the live state without modifying the job definitions.
+This standalone file contains five independent point-in-time scheduler snapshots for `2026-09-21` through `2026-09-25`. Keeping status data separate from the static dependency catalog lets participants select, update, or replace a daily state without modifying the job definitions. The scenarios cover a delayed extract, running enrichment, running report build, failed validation with blocked downstream jobs, and successful recovery.
+
+Top-level fields:
+
+| Field | Type | Description |
+|---|---|---|
+| `metadata` | object | Dataset identity, date range, snapshot count, UTC time basis, and snapshot semantics. |
+| `snapshots` | array of objects | Five independent daily SOD status snapshots. |
+
+Each object in `snapshots` contains:
 
 | Field | Description |
 |---|---|
 | `business_date` | SOD processing date. |
 | `as_of` | Timestamp at which the snapshot was captured. |
+| `scenario_id` | Short machine-readable label for the operational scenario. |
+| `scenario_description` | Human-readable explanation of the scenario. |
 | `job_states` | Current state of all BOX and CMD jobs. |
 | `email_recipients` | Fictional regional and global distribution lists. |
 | `status_email_requirements` | Required facts and safety rules for generated status emails. |
 
 Each `job_states` record contains `job_name`, `job_type`, `region`, `status`, `actual_start`, `actual_end`, `elapsed_seconds`, and `latest_status_message`. Possible live states are `NOT_STARTED`, `WAITING`, `RUNNING`, `SUCCESS`, `FAILED`, or `BLOCKED`.
+
+### Included daily scenarios
+
+| Business date | Scenario ID | EMEA state represented |
+|---|---|---|
+| `2026-09-21` | `extract_delayed` | Transaction extraction is still running and downstream work is waiting. |
+| `2026-09-22` | `enrichment_running` | Extracts and validation succeeded; data enrichment is running. |
+| `2026-09-23` | `report_build_running` | Report construction is running while publication waits. |
+| `2026-09-24` | `validation_failed` | Validation failed and five downstream CMD jobs are blocked. |
+| `2026-09-25` | `recovery_complete` | The prior issue is resolved and the regional BOX completed successfully. |
 
 ## Dataset 3: `autosys_execution_history.json`
 

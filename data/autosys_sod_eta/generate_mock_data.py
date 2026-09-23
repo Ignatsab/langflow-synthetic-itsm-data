@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import random
+from copy import deepcopy
 from datetime import date, datetime, time, timedelta, timezone
 from pathlib import Path
 
@@ -100,7 +101,7 @@ def build_job_catalog() -> list[dict]:
     return jobs
 
 
-def build_current_snapshot(jobs: list[dict]) -> dict:
+def build_baseline_snapshot() -> dict:
     business_date = "2026-09-21"
     as_of = "2026-09-21T06:15:00Z"
     states: list[dict] = []
@@ -158,6 +159,179 @@ def build_current_snapshot(jobs: list[dict]) -> dict:
             "Name the current or blocking CMD job and identify SLA risk.",
             "Do not report a BOX as complete until all terminal child CMD jobs succeed."
         ]
+    }
+
+
+def shift_timestamp(value: str | None, days: int = 0, hours: int = 0) -> str | None:
+    if value is None:
+        return None
+    parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    return iso(parsed + timedelta(days=days, hours=hours))
+
+
+def shifted_snapshot(baseline: dict, business_day: date) -> dict:
+    snapshot = deepcopy(baseline)
+    day_offset = (business_day - date(2026, 9, 21)).days
+    snapshot["business_date"] = business_day.isoformat()
+    snapshot["as_of"] = shift_timestamp(snapshot["as_of"], days=day_offset)
+    for state in snapshot["job_states"]:
+        state["actual_start"] = shift_timestamp(state["actual_start"], days=day_offset)
+        state["actual_end"] = shift_timestamp(state["actual_end"], days=day_offset)
+    return snapshot
+
+
+def update_state(snapshot: dict, name: str, **changes: object) -> None:
+    state = next(item for item in snapshot["job_states"] if item["job_name"] == name)
+    state.update(changes)
+
+
+def apply_emea_scenario(snapshot: dict, scenario: str) -> None:
+    day = snapshot["business_date"]
+
+    if scenario in {"enrichment_running", "report_build_running", "validation_failed"}:
+        update_state(
+            snapshot,
+            job_name("EMEA", "EXTRACT_TRANSACTIONS"),
+            status="SUCCESS",
+            actual_start=f"{day}T04:36:00Z",
+            actual_end=f"{day}T05:18:00Z",
+            elapsed_seconds=2520,
+            latest_status_message="Completed normally.",
+        )
+        update_state(
+            snapshot,
+            job_name("EMEA", "VALIDATE_TRANSACTIONS"),
+            status="SUCCESS",
+            actual_start=f"{day}T05:19:00Z",
+            actual_end=f"{day}T05:35:00Z",
+            elapsed_seconds=960,
+            latest_status_message="Completed normally.",
+        )
+
+    if scenario == "enrichment_running":
+        update_state(
+            snapshot,
+            box_name("EMEA"),
+            latest_status_message="Data enrichment is running after all extracts completed.",
+        )
+        update_state(
+            snapshot,
+            job_name("EMEA", "ENRICH_DATA"),
+            status="RUNNING",
+            actual_start=f"{day}T05:36:00Z",
+            actual_end=None,
+            elapsed_seconds=2340,
+            latest_status_message="Joining transaction, reference, and customer datasets.",
+        )
+
+    elif scenario == "report_build_running":
+        update_state(
+            snapshot,
+            job_name("EMEA", "ENRICH_DATA"),
+            status="SUCCESS",
+            actual_start=f"{day}T05:36:00Z",
+            actual_end=f"{day}T05:58:00Z",
+            elapsed_seconds=1320,
+            latest_status_message="Completed normally.",
+        )
+        update_state(
+            snapshot,
+            job_name("EMEA", "BUILD_REPORT"),
+            status="RUNNING",
+            actual_start=f"{day}T05:59:00Z",
+            actual_end=None,
+            elapsed_seconds=960,
+            latest_status_message="Rendering the regional report package.",
+        )
+        update_state(
+            snapshot,
+            box_name("EMEA"),
+            latest_status_message="Report build is running; publication has not started.",
+        )
+
+    elif scenario == "validation_failed":
+        update_state(
+            snapshot,
+            job_name("EMEA", "VALIDATE_TRANSACTIONS"),
+            status="FAILED",
+            actual_start=f"{day}T05:19:00Z",
+            actual_end=f"{day}T05:36:00Z",
+            elapsed_seconds=1020,
+            latest_status_message="Control totals did not match the extracted source totals.",
+        )
+        for suffix in ("ENRICH_DATA", "BUILD_REPORT", "PUBLISH_REPORT", "ARCHIVE", "SEND_STATUS"):
+            update_state(
+                snapshot,
+                job_name("EMEA", suffix),
+                status="BLOCKED",
+                actual_start=None,
+                actual_end=None,
+                elapsed_seconds=0,
+                latest_status_message="Blocked by CMD_EMEA_VALIDATE_TRANSACTIONS failure.",
+            )
+        update_state(
+            snapshot,
+            box_name("EMEA"),
+            status="FAILED",
+            actual_end=f"{day}T05:36:00Z",
+            elapsed_seconds=3960,
+            latest_status_message="Validation failed; five downstream CMD jobs are blocked.",
+        )
+
+    elif scenario == "recovery_complete":
+        states = {item["job_name"]: item for item in snapshot["job_states"]}
+        for template in TEMPLATES:
+            suffix = template["suffix"]
+            apac_state = states[job_name("APAC", suffix)]
+            update_state(
+                snapshot,
+                job_name("EMEA", suffix),
+                status="SUCCESS",
+                actual_start=shift_timestamp(apac_state["actual_start"], hours=4),
+                actual_end=shift_timestamp(apac_state["actual_end"], hours=4),
+                elapsed_seconds=apac_state["elapsed_seconds"],
+                latest_status_message="Completed normally after the prior-day validation issue was resolved.",
+            )
+        snapshot["as_of"] = f"{day}T07:15:00Z"
+        update_state(
+            snapshot,
+            box_name("EMEA"),
+            status="SUCCESS",
+            actual_start=f"{day}T04:30:00Z",
+            actual_end=f"{day}T06:50:00Z",
+            elapsed_seconds=8400,
+            latest_status_message="All child CMD jobs completed; report delivered at 06:38 UTC.",
+        )
+
+
+def build_current_status_dataset() -> dict:
+    baseline = build_baseline_snapshot()
+    scenarios = [
+        (date(2026, 9, 21), "extract_delayed", "EMEA transaction extraction is running longer than usual."),
+        (date(2026, 9, 22), "enrichment_running", "EMEA extraction completed and data enrichment is running."),
+        (date(2026, 9, 23), "report_build_running", "EMEA report generation is in progress and publication is waiting."),
+        (date(2026, 9, 24), "validation_failed", "EMEA validation failed and downstream jobs are blocked."),
+        (date(2026, 9, 25), "recovery_complete", "EMEA recovered and completed successfully after the prior-day failure."),
+    ]
+    snapshots: list[dict] = []
+    for business_day, scenario_id, description in scenarios:
+        snapshot = shifted_snapshot(baseline, business_day)
+        snapshot["scenario_id"] = scenario_id
+        snapshot["scenario_description"] = description
+        apply_emea_scenario(snapshot, scenario_id)
+        snapshots.append(snapshot)
+
+    return {
+        "metadata": {
+            "dataset_name": "autosys_sod_daily_status_snapshots",
+            "generated_at": "2026-09-21T00:00:00Z",
+            "snapshot_start": scenarios[0][0].isoformat(),
+            "snapshot_end": scenarios[-1][0].isoformat(),
+            "snapshot_count": len(snapshots),
+            "time_basis": "UTC",
+            "snapshot_semantics": "Each snapshot is an independent mock point-in-time scheduler state for ETA and status-email testing.",
+        },
+        "snapshots": snapshots,
     }
 
 
@@ -306,13 +480,14 @@ def build_historical_dataset() -> dict:
 
 def main() -> None:
     dependencies = build_dependencies_dataset()
-    current_snapshot = build_current_snapshot(dependencies["jobs"])
+    current_status = build_current_status_dataset()
     history = build_historical_dataset()
     (OUTPUT_DIR / "autosys_job_dependencies.json").write_text(json.dumps(dependencies, indent=2) + "\n", encoding="utf-8")
-    (OUTPUT_DIR / "autosys_current_sod_snapshot.json").write_text(json.dumps(current_snapshot, indent=2) + "\n", encoding="utf-8")
+    (OUTPUT_DIR / "autosys_current_sod_snapshot.json").write_text(json.dumps(current_status, indent=2) + "\n", encoding="utf-8")
     (OUTPUT_DIR / "autosys_execution_history.json").write_text(json.dumps(history, indent=2) + "\n", encoding="utf-8")
     print(f"Generated {len(dependencies['jobs'])} job definitions")
-    print(f"Generated {len(current_snapshot['job_states'])} current SOD job states")
+    print(f"Generated {len(current_status['snapshots'])} daily SOD snapshots")
+    print(f"Generated {sum(len(snapshot['job_states']) for snapshot in current_status['snapshots'])} current SOD job states")
     print(f"Generated {len(history['command_runs'])} CMD runs and {len(history['box_runs'])} BOX runs")
 
 
